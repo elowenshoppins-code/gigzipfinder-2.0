@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native build output
+android/
+ios/
+
+# Signing
+*.jks
+*.keystore
+
+# Environment / secrets
+.env
+.env.*
+
+# Misc
+.DS_Store
+*.log
+.vscode/
