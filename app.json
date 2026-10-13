@@ -22,11 +22,11 @@
       "buildNumber": "1",
       "bundleIdentifier": "com.gigzipfinder.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Gig ZipFinder necesita acceso a la cámara para tomar fotos de tus recibos.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Gig ZipFinder usa tu ubicación incluso en segundo plano para registrar tus viajes de trabajo automáticamente.",
-        "NSLocationWhenInUseUsageDescription": "Gig ZipFinder usa tu ubicación para contar millas de trabajo mientras conduces.",
-        "NSMotionUsageDescription": "Gig ZipFinder usa el sensor de movimiento para detectar tus viajes de trabajo automáticamente.",
-        "NSPhotoLibraryUsageDescription": "Gig ZipFinder necesita acceso a tu biblioteca de fotos para adjuntar imágenes a tus registros.",
+        "NSCameraUsageDescription": "Gig ZipFinder necesita acceso a la c\u00e1mara para tomar fotos de tus recibos.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Gig ZipFinder usa tu ubicaci\u00f3n incluso en segundo plano para registrar tus viajes de trabajo autom\u00e1ticamente.",
+        "NSLocationWhenInUseUsageDescription": "Gig ZipFinder usa tu ubicaci\u00f3n para contar millas de trabajo mientras conduces.",
+        "NSMotionUsageDescription": "Gig ZipFinder usa el sensor de movimiento para detectar tus viajes de trabajo autom\u00e1ticamente.",
+        "NSPhotoLibraryUsageDescription": "Gig ZipFinder necesita acceso a tu biblioteca de fotos para adjuntar im\u00e1genes a tus registros.",
         "UIBackgroundModes": [
           "location",
           "fetch"
@@ -45,7 +45,15 @@
           "locationAlwaysAndWhenInUsePermission": "Permite a Gig ZipFinder registrar tus millas de trabajo incluso con la app en segundo plano."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
     ],
     "scheme": "gigzipfinder",
     "slug": "gig-zipfinder-2",
