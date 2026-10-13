@@ -3,32 +3,31 @@
  *
  * Arquitectura: la app habla contra la interfaz `BillingProvider`.
  * Hoy el provider activo es `MockBillingProvider` (compras simuladas
- * guardadas en settings). Para activar compras reales:
+ * guardadas en settings). Para activar compras reales con RevenueCat:
  *
  *   1. Crea los productos en App Store Connect y Google Play Console:
- *      - ZIP por app: producto NO renovable de $20 USD (uno por app de gig,
- *        o un solo producto y registra la app en tu backend).
+ *      - ZIP por app: producto NO renovable de $20 USD.
  *      - Toolkit: suscripción auto-renovable de $10 USD/mes.
- *   2. Crea la cuenta en RevenueCat (https://www.revenuecat.com) y
- *      configura los entitlements:
+ *   2. Crea tu cuenta en RevenueCat y configura los entitlements:
  *        - `zip_access`  → productos de $20
  *        - `toolkit_pro` → suscripción de $10/mes
- *   3. Pon tus API keys abajo en REVENUECAT_KEYS.
- *   4. `npx expo install react-native-purchases`
- *   5. Cambia `activeProvider` a `revenueCatProvider`.
+ *   3. Ejecuta: `npx expo install react-native-purchases`
+ *   4. Pon tus API keys en REVENUECAT_KEYS (abajo).
+ *   5. Reemplaza el cuerpo de `revenueCatProvider` con la implementación
+ *      de referencia en `billing.revenuecat.reference.ts`.
+ *   6. Cambia `activeProvider` a `revenueCatProvider`.
  *
- * Sin keys configuradas, el RevenueCatProvider lanza un error claro en
- * lugar de cobrar de mentiras: nunca se simula un cobro real.
+ * El SDK de RevenueCat NO está instalado a propósito: es un módulo
+ * nativo y solo debe agregarse cuando vayas a usar compras reales.
  */
 
-import { Platform } from 'react-native';
 import { getSetting, setSetting } from '../db/database';
 
 /* ------------------------------------------------------------------ */
 /* Configuración — Carlos: pon aquí tus keys de RevenueCat             */
 /* ------------------------------------------------------------------ */
 
-const REVENUECAT_KEYS: { ios: string; android: string } = {
+export const REVENUECAT_KEYS: { ios: string; android: string } = {
   ios: '', // p. ej. 'appl_XXXXXXXXXXXXXXXX'
   android: '', // p. ej. 'goog_XXXXXXXXXXXXXXXX'
 };
@@ -73,6 +72,13 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function notConfigured(): never {
+  throw new Error(
+    '[billing] RevenueCat no está configurado. Sigue los pasos en src/services/billing.ts ' +
+      '(instala react-native-purchases, pon tus API keys y activa revenueCatProvider).',
+  );
+}
+
 export const mockBillingProvider: BillingProvider = {
   id: 'mock',
   isConfigured: false,
@@ -103,50 +109,10 @@ export const mockBillingProvider: BillingProvider = {
 /* ------------------------------------------------------------------ */
 /* Provider RevenueCat (producción)                                    */
 /*                                                                     */
-/* Carga `react-native-purchases` de forma diferida para que la app    */
-/* compile y corra aunque el módulo nativo aún no esté instalado.      */
+/* Implementación real en `billing.revenuecat.reference.ts` (código    */
+/* de referencia, no se empaqueta). Actívalo siguiendo los pasos      */
+/* del encabezado de este archivo.                                     */
 /* ------------------------------------------------------------------ */
-
-type PurchasesModule = {
-  configure(options: { apiKey: string }): void;
-  purchaseProduct(productId: string): Promise<unknown>;
-  purchaseStoreProduct(product: unknown): Promise<unknown>;
-  getOfferings(): Promise<{
-    current?: {
-      monthly?: { product: { identifier: string } } | null;
-    } | null;
-  }>;
-  restorePurchases(): Promise<unknown>;
-  getCustomerInfo(): Promise<{
-    entitlements: { active: Record<string, unknown> };
-  }>;
-};
-
-function loadPurchases(): PurchasesModule {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('react-native-purchases');
-  return (mod.default ?? mod) as PurchasesModule;
-}
-
-function revenueCatKey(): string {
-  const key = Platform.OS === 'ios' ? REVENUECAT_KEYS.ios : REVENUECAT_KEYS.android;
-  if (!key) {
-    throw new Error(
-      '[billing] RevenueCat sin configurar: pon tu API key en REVENUECAT_KEYS (src/services/billing.ts).',
-    );
-  }
-  return key;
-}
-
-let rcConfigured = false;
-function ensureRc(): PurchasesModule {
-  const Purchases = loadPurchases();
-  if (!rcConfigured) {
-    Purchases.configure({ apiKey: revenueCatKey() });
-    rcConfigured = true;
-  }
-  return Purchases;
-}
 
 export const revenueCatProvider: BillingProvider = {
   id: 'revenuecat',
@@ -154,51 +120,11 @@ export const revenueCatProvider: BillingProvider = {
     return REVENUECAT_KEYS.ios !== '' || REVENUECAT_KEYS.android !== '';
   },
 
-  async hasZipAccess(app: string): Promise<boolean> {
-    try {
-      const info = await ensureRc().getCustomerInfo();
-      return Boolean(info.entitlements.active[`${ENTITLEMENTS.zip}:${app}`] ?? info.entitlements.active[ENTITLEMENTS.zip]);
-    } catch {
-      return false;
-    }
-  },
-
-  async purchaseZip(app: string): Promise<void> {
-    const Purchases = ensureRc();
-    await Purchases.purchaseProduct(PRODUCTS.zipPerApp(app));
-    await setSetting(ZIP_KEY(app), '1'); // caché local
-  },
-
-  async hasToolkitAccess(): Promise<boolean> {
-    try {
-      const info = await ensureRc().getCustomerInfo();
-      return Boolean(info.entitlements.active[ENTITLEMENTS.toolkit]);
-    } catch {
-      return (await getSetting(TOOLKIT_KEY)) === 'active'; // fallback a caché
-    }
-  },
-
-  async subscribeToolkit(): Promise<void> {
-    const Purchases = ensureRc();
-    const offerings = await Purchases.getOfferings();
-    const monthly = offerings.current?.monthly;
-    if (!monthly) {
-      // Sin offering configurado: compra directa del producto.
-      await Purchases.purchaseProduct(PRODUCTS.toolkitMonthly);
-    } else {
-      await Purchases.purchaseStoreProduct(monthly.product);
-    }
-    await setSetting(TOOLKIT_KEY, 'active'); // caché local
-  },
-
-  async restorePurchases(): Promise<void> {
-    const Purchases = ensureRc();
-    const info = (await Purchases.restorePurchases()) as
-      | { entitlements: { active: Record<string, unknown> } }
-      | undefined;
-    const active = info?.entitlements?.active ?? (await Purchases.getCustomerInfo()).entitlements.active;
-    await setSetting(TOOLKIT_KEY, active[ENTITLEMENTS.toolkit] ? 'active' : '');
-  },
+  hasZipAccess: async () => notConfigured(),
+  purchaseZip: async () => notConfigured(),
+  hasToolkitAccess: async () => notConfigured(),
+  subscribeToolkit: async () => notConfigured(),
+  restorePurchases: async () => notConfigured(),
 };
 
 /* ------------------------------------------------------------------ */
