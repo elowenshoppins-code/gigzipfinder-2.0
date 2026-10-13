@@ -16,6 +16,7 @@
 
 import { getDb, type EarningEntry, type DocRecord } from '../db/database';
 import { uid, fmtMoney, fmtMiles, todayISO, isoDate } from '../utils/format';
+import { getStrings } from '../i18n';
 
 /** Mensaje del chat. `action` muestra un botón que navega a una ruta. */
 export interface ChatMsg {
@@ -116,14 +117,13 @@ function platformLabel(p: string): string {
 
 /** ¿Cuánto hice/gané esta semana? → suma earnings de los últimos 7 días. */
 function weeklyEarnings(): ChatMsg {
+  const t = getStrings().gigai;
   const rows = query<Pick<EarningEntry, 'date' | 'earnings' | 'tips' | 'hours'>>(
     'SELECT date, earnings, tips, hours FROM earnings WHERE date >= ?',
     [daysAgoISO(6)],
   );
   if (rows.length === 0) {
-    return bot(
-      'Aún no tienes ganancias registradas esta semana. Cuando agregues tus ingresos del día, podré resumirlos aquí.',
-    );
+    return bot(t.weeklyEmpty);
   }
   let total = 0;
   let hours = 0;
@@ -134,20 +134,19 @@ function weeklyEarnings(): ChatMsg {
     if (r.date) days.add(r.date);
   }
   const n = days.size;
-  return bot(
-    `Esta semana: ${fmtMoney(total)} en ${fmtH(hours)} (${n} ${n === 1 ? 'día activo' : 'días activos'}).`,
-  );
+  return bot(t.weeklySummary(fmtMoney(total), fmtH(hours), n));
 }
 
 /** ¿Cuál es mi mejor app/plataforma? → mayor $/hora en 30 días. */
 function bestPlatform(): ChatMsg {
+  const t = getStrings().gigai;
   const rows = query<Pick<EarningEntry, 'platform' | 'earnings' | 'tips' | 'hours'>>(
     'SELECT platform, earnings, tips, hours FROM earnings WHERE date >= ?',
     [daysAgoISO(29)],
   );
   const byApp = new Map<string, { total: number; hours: number }>();
   for (const r of rows) {
-    const p = (r.platform ?? '').trim() || 'Otra';
+    const p = (r.platform ?? '').trim() || t.platformOther;
     const cur = byApp.get(p) ?? { total: 0, hours: 0 };
     cur.total += num(r.earnings) + num(r.tips);
     cur.hours += num(r.hours);
@@ -165,17 +164,14 @@ function bestPlatform(): ChatMsg {
     }
   }
   if (!best) {
-    return bot(
-      'Aún no tienes suficientes datos para calcular tu mejor plataforma. Registra tus ganancias con horas por app.',
-    );
+    return bot(t.bestEmpty);
   }
-  return bot(
-    `Tu mejor plataforma (últimos 30 días) es ${platformLabel(best)} con ${fmtMoney(bestRate)}/hora.`,
-  );
+  return bot(t.bestSummary(platformLabel(best), fmtMoney(bestRate)));
 }
 
 /** ¿Cuántas millas este mes? → suma distanceMiles de trabajo del mes. */
 function monthlyMiles(): ChatMsg {
+  const t = getStrings().gigai;
   const rows = query<{ distanceMiles: number }>(
     "SELECT distanceMiles FROM trips WHERE purpose = 'work' AND startTime >= ?",
     [monthStartMs()],
@@ -183,13 +179,14 @@ function monthlyMiles(): ChatMsg {
   let total = 0;
   for (const r of rows) total += num(r.distanceMiles);
   if (total <= 0) {
-    return bot('Aún no registras millas de trabajo este mes.');
+    return bot(t.milesEmpty);
   }
-  return bot(`Este mes llevas ${fmtMiles(total)} de trabajo.`);
+  return bot(t.milesSummary(fmtMiles(total)));
 }
 
 /** Gasolina → gasto últimos 30 días + $/milla. */
 function gasSummary(): ChatMsg {
+  const t = getStrings().gigai;
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const fuelRows = query<{ amount: number }>(
     'SELECT amount FROM fuelups WHERE date >= ?',
@@ -198,7 +195,7 @@ function gasSummary(): ChatMsg {
   let gas = 0;
   for (const r of fuelRows) gas += num(r.amount);
   if (gas <= 0) {
-    return bot('Aún no registras gasto de gasolina en los últimos 30 días.');
+    return bot(t.gasEmpty);
   }
   const tripRows = query<{ distanceMiles: number }>(
     "SELECT distanceMiles FROM trips WHERE purpose = 'work' AND startTime >= ?",
@@ -207,34 +204,30 @@ function gasSummary(): ChatMsg {
   let miles = 0;
   for (const r of tripRows) miles += num(r.distanceMiles);
   const perMile =
-    miles > 0 ? ` (${fmtMoney(gas / miles)} por milla en ${fmtMiles(miles)})` : '';
-  return bot(`En los últimos 30 días gastaste ${fmtMoney(gas)} en gasolina${perMile}.`);
+    miles > 0 ? t.gasPerMile(fmtMoney(gas / miles), fmtMiles(miles)) : '';
+  return bot(t.gasSummary(fmtMoney(gas), perMile));
 }
 
 /** Desactivación → pasos + acción a Appeal AI. */
 function deactivationHelp(): ChatMsg {
-  return bot(
-    'Si te desactivaron una cuenta:\n' +
-      '1) Guarda el correo o aviso de la plataforma y toma capturas.\n' +
-      '2) Reúne pruebas: viajes, calificaciones y mensajes.\n' +
-      '3) Genera tu carta de apelación con Appeal AI.',
-    { label: 'Ir a Appeal AI', route: '/(tabs)/appeal' },
-  );
+  const t = getStrings().gigai;
+  return bot(t.deactivationHelp, { label: t.goAppeal, route: '/(tabs)/appeal' });
 }
 
 /** Documentos / seguro / vencimientos → próximos a vencer. */
 function upcomingDocs(): ChatMsg {
+  const t = getStrings().gigai;
   const rows = query<Pick<DocRecord, 'name' | 'expiryDate'>>(
     'SELECT name, expiryDate FROM documents WHERE expiryDate IS NOT NULL AND expiryDate != "" ORDER BY expiryDate LIMIT 10',
     [],
   );
   if (rows.length === 0) {
-    return bot('No tienes documentos con fecha de vencimiento registrada.');
+    return bot(t.docsEmpty);
   }
   const today = todayISO();
   const upcoming = rows.filter((r) => (r.expiryDate ?? '') >= today).slice(0, 5);
   if (upcoming.length === 0) {
-    return bot('No tienes vencimientos próximos. Todo al día.');
+    return bot(t.docsAllGood);
   }
   const dayMs = 24 * 60 * 60 * 1000;
   const todayNoon = new Date(`${today}T12:00:00`).getTime();
@@ -244,14 +237,15 @@ function upcomingDocs(): ChatMsg {
       (new Date(`${exp}T12:00:00`).getTime() - todayNoon) / dayMs,
     );
     const when =
-      diff <= 0 ? 'vence hoy' : diff === 1 ? 'vence mañana' : `vence en ${diff} días`;
+      diff <= 0 ? t.expiresToday : diff === 1 ? t.expiresTomorrow : t.expiresIn(diff);
     return `• ${r.name}: ${when} (${exp})`;
   });
-  return bot(`Documentos próximos a vencer:\n${lines.join('\n')}`);
+  return bot(`${t.docsTitle}\n${lines.join('\n')}`);
 }
 
 /** Impuestos → resumen del mes + acción al Tax Center. */
 function taxSummary(): ChatMsg {
+  const t = getStrings().gigai;
   const rows = query<Pick<EarningEntry, 'earnings' | 'tips'>>(
     'SELECT earnings, tips FROM earnings WHERE date >= ?',
     [monthStartISO()],
@@ -264,64 +258,68 @@ function taxSummary(): ChatMsg {
   );
   let miles = 0;
   for (const r of tripRows) miles += num(r.distanceMiles);
-  return bot(
-    `Este mes: ${fmtMoney(total)} en ganancias y ${fmtMiles(miles)} de trabajo. Abre el Tax Center para ver tus deducciones estimadas.`,
-    { label: 'Abrir Tax Center', route: '/taxes' },
-  );
+  return bot(t.taxSummary(fmtMoney(total), fmtMiles(miles)), {
+    label: t.openTaxCenter,
+    route: '/taxes',
+  });
 }
 
 /** Hola / ayuda / qué puedes hacer → capacidades. */
 function capabilities(): ChatMsg {
-  return bot(
-    'Puedo ayudarte con:\n' +
-      '• Tus ganancias (semana y mes)\n' +
-      '• Tu mejor plataforma\n' +
-      '• Millas de trabajo y gasto de gasolina\n' +
-      '• Documentos próximos a vencer\n' +
-      '• Impuestos y apelaciones\n\n' +
-      'Prueba: «¿cuánto hice esta semana?»',
-  );
+  return bot(getStrings().gigai.capabilities);
 }
 
 /* ------------------------------------------------------------------ */
 /* Punto de entrada                                                    */
 /* ------------------------------------------------------------------ */
 
-/** Responde una pregunta del usuario usando reglas + datos locales. */
+/**
+ * Responde una pregunta del usuario usando reglas + datos locales.
+ *
+ * Los intents se detectan en los tres idiomas (es/en/pt): `norm()` ya
+ * quita tildes y pasa a minúsculas, así que los patrones se escriben sin
+ * tildes. Las respuestas salen en el idioma actual (ver getStrings()).
+ */
 export async function answerQuery(q: string): Promise<ChatMsg> {
   const text = norm(q);
 
-  if (/cuanto (hice|gane)/.test(text) && text.includes('semana')) {
+  if (
+    /(cuanto (hice|gane)|how much.*(made|earn)|quanto (fiz|ganhei))/.test(text) &&
+    /(semana|week)/.test(text)
+  ) {
     return weeklyEarnings();
   }
-  if (/mejor (app|aplicacion|plataforma)/.test(text)) {
+  if (
+    /(mejor (app|aplicacion|plataforma)|best (app|platform)|melhor (app|aplicativo|plataforma))/.test(
+      text,
+    )
+  ) {
     return bestPlatform();
   }
-  if (text.includes('millas') && text.includes('mes')) {
+  if (/(millas|miles|milhas)/.test(text) && /(mes|month)/.test(text)) {
     return monthlyMiles();
   }
-  if (text.includes('gasolina')) {
+  if (/(gasolina|\bgas\b|combust)/.test(text)) {
     return gasSummary();
   }
-  if (text.includes('desactiv')) {
+  if (/(desactiv|deactivat|desativ)/.test(text)) {
     return deactivationHelp();
   }
   if (
-    text.includes('documento') ||
-    text.includes('seguro') ||
-    text.includes('vence') ||
-    text.includes('vencimiento')
+    /(documento|seguro|vence|vencimiento|document|insurance|expir)/.test(text)
   ) {
     return upcomingDocs();
   }
-  if (text.includes('impuesto') || text.includes('tax')) {
+  if (/(impuesto|tax|imposto)/.test(text)) {
     return taxSummary();
   }
-  if (text.includes('hola') || text.includes('ayuda') || /que puedes/.test(text)) {
+  if (
+    /(hola|ayuda|que puedes|hello|\bhi\b|help|what can you do|ola|ajuda|o que (voce|pode))/.test(
+      text,
+    )
+  ) {
     return capabilities();
   }
 
-  return bot(
-    "Puedo ayudarte con tus ganancias, millas, mejor plataforma, documentos y apelaciones. Prueba: '¿cuánto hice esta semana?'",
-  );
+  return bot(getStrings().gigai.fallback);
 }

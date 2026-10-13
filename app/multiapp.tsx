@@ -22,6 +22,8 @@ import {
   subscribeToolkit,
   restorePurchases,
 } from '../src/services/monetization';
+import { useStrings } from '../src/i18n';
+import { theme } from '../src/theme';
 
 type Period = 'day' | 'week';
 
@@ -44,6 +46,7 @@ function addDays(iso: string, days: number): string {
 }
 
 export default function MultiAppScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   return (
@@ -53,13 +56,8 @@ export default function MultiAppScreen() {
       ) : (
         <Paywall
           title="Multi-App"
-          priceText="$10/mes"
-          features={[
-            'Compara tus plataformas lado a lado',
-            'Descubre cuál te paga mejor por hora',
-            'Vista por día o por semana',
-            'Toma decisiones con datos, no con corazonadas',
-          ]}
+          priceText={t.common.perMonth}
+          features={t.multiapp.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -75,6 +73,7 @@ export default function MultiAppScreen() {
 }
 
 function MultiAppContent() {
+  const t = useStrings();
   const [date, setDate] = useState(todayISO());
   const [period, setPeriod] = useState<Period>('day');
   const [rows, setRows] = useState<PlatformRow[]>([]);
@@ -98,7 +97,7 @@ function MultiAppContent() {
       );
       setRows(
         data.map((r) => ({
-          platform: r.platform || 'Otro',
+          platform: r.platform || t.multiapp.platformOther,
           earned: num(r.earned),
           miles: num(r.miles),
           hours: num(r.hours),
@@ -110,7 +109,7 @@ function MultiAppContent() {
     } finally {
       setLoading(false);
     }
-  }, [date, period]);
+  }, [date, period, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -128,18 +127,18 @@ function MultiAppContent() {
       ? candidates.reduce((a, b) => (perHour(b) > perHour(a) ? b : a))
       : null;
 
-  const periodLabel = period === 'day' ? 'hoy' : 'esta semana';
+  const periodLabel = period === 'day' ? t.multiapp.periodToday : t.multiapp.periodWeek;
 
   return (
     <View>
-      <Text style={styles.title}>📊 Multi-App</Text>
+      <Text style={styles.title}>{t.multiapp.title}</Text>
 
       {/* Selector día / semana */}
       <View style={styles.segmented}>
         {(
           [
-            { key: 'day', label: 'Día' },
-            { key: 'week', label: 'Semana' },
+            { key: 'day', label: t.common.dia },
+            { key: 'week', label: t.common.semana },
           ] as { key: Period; label: string }[]
         ).map((p) => (
           <TouchableOpacity
@@ -185,10 +184,10 @@ function MultiAppContent() {
       {/* Mejor plataforma */}
       {!loading && best && (
         <View style={styles.trophy}>
-          <Text style={styles.trophyTitle}>🏆 Mejor plataforma {periodLabel}</Text>
+          <Text style={styles.trophyTitle}>{t.multiapp.bestPlatform(periodLabel)}</Text>
           <Text style={styles.trophyName}>{best.platform}</Text>
           <Text style={styles.trophySub}>
-            {fmtMoney(perHour(best))}/hora · {best.shifts} turno(s) ·{' '}
+            {fmtMoney(perHour(best))}{t.multiapp.perHourSuffix} · {t.multiapp.shiftsCount(best.shifts)} ·{' '}
             {fmtMiles(best.miles)}
           </Text>
         </View>
@@ -196,32 +195,30 @@ function MultiAppContent() {
       {!loading && !best && rows.length > 0 && (
         <View style={styles.hint}>
           <Text style={styles.hintText}>
-            Aún no hay suficientes datos para elegir una ganadora (se necesita al
-            menos 1 hora registrada por plataforma).
+            {t.multiapp.hintEmpty}
           </Text>
         </View>
       )}
 
       {/* Tabla */}
-      <Text style={styles.sectionTitle}>Por plataforma</Text>
+      <Text style={styles.sectionTitle}>{t.multiapp.byPlatform}</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : rows.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>
-            📝 Sin registros para este período.{'\n'}Agrega tus ganancias en la
-            pestaña Ganancias.
-          </Text>
+          <Text style={styles.emptyText}>{t.multiapp.emptyMsg}</Text>
         </View>
       ) : (
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeader]}>
             <Text style={[styles.cell, styles.cellPlatform, styles.headerText]}>
-              Plataforma
+              {t.multiapp.colPlatform}
             </Text>
-            <Text style={[styles.cell, styles.headerText, styles.num]}>Ganado</Text>
-            <Text style={[styles.cell, styles.headerText, styles.num]}>Millas</Text>
-            <Text style={[styles.cell, styles.headerText, styles.num]}>$/hora</Text>
+            <Text style={[styles.cell, styles.headerText, styles.num]}>{t.multiapp.colEarned}</Text>
+            <Text style={[styles.cell, styles.headerText, styles.num]}>
+              {t.multiapp.milesLabel}
+            </Text>
+            <Text style={[styles.cell, styles.headerText, styles.num]}>{t.multiapp.colPerHour}</Text>
           </View>
           {rows.map((r) => {
             const isBest = best !== null && r.platform === best.platform;
@@ -256,12 +253,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 4,
     marginBottom: 10,
@@ -273,7 +270,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -281,11 +278,11 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
     fontWeight: '600',
   },
   segmentTextActive: {
-    color: '#0A0A0A',
+    color: theme.text,
     fontWeight: '700',
   },
   dateNav: {
@@ -295,8 +292,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   navButton: {
-    backgroundColor: '#F6F7F6',
-    borderRadius: 10,
+    backgroundColor: theme.card,
+    borderRadius: theme.radiusPill,
     width: 40,
     height: 40,
     alignItems: 'center',
@@ -306,19 +303,19 @@ const styles = StyleSheet.create({
   navButtonText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#00A651',
+    color: theme.primary,
   },
   dateText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     minWidth: 120,
     textAlign: 'center',
   },
   trophy: {
-    backgroundColor: '#FEF9E7',
+    backgroundColor: theme.warningBg,
     borderWidth: 1,
-    borderColor: '#F5D547',
+    borderColor: theme.warning,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
@@ -326,48 +323,48 @@ const styles = StyleSheet.create({
   trophyTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#92690E',
+    color: theme.warning,
     marginBottom: 6,
   },
   trophyName: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 4,
   },
   trophySub: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   hint: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
   },
   hintText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
     lineHeight: 18,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
   },
   loader: {
     marginVertical: 20,
   },
   empty: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -375,21 +372,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
   },
   tableRow: {
     flexDirection: 'row',
     paddingVertical: 12,
     paddingHorizontal: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: theme.card,
   },
   tableHeader: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
   },
   bestRow: {
-    backgroundColor: '#FEFCE8',
+    backgroundColor: theme.warningBg,
   },
   cell: {
     flex: 1,
@@ -399,12 +396,12 @@ const styles = StyleSheet.create({
   },
   cellText: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
   },
   headerText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#6B7280',
+    color: theme.textMuted,
     textTransform: 'uppercase',
   },
   num: {

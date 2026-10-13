@@ -27,6 +27,8 @@ import {
   restorePurchases,
 } from '../src/services/monetization';
 import { scheduleReminder, cancelReminder } from '../src/services/notifications';
+import { useStrings } from '../src/i18n';
+import { theme } from '../src/theme';
 
 const num = (v: number | null | undefined): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : 0;
@@ -62,16 +64,10 @@ function parseNum(raw: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-const DEFAULT_MAINTENANCE: { type: string; months: number }[] = [
-  { type: 'Cambio de aceite', months: 3 },
-  { type: 'Rotación de neumáticos', months: 6 },
-  { type: 'Revisar batería', months: 12 },
-  { type: 'Registro / inspección del vehículo', months: 12 },
-];
-
 const reminderId = (id: string): string => `maint_${id}`;
 
 export default function GasScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   return (
@@ -80,14 +76,9 @@ export default function GasScreen() {
         <GasContent />
       ) : (
         <Paywall
-          title="Gasolina"
-          priceText="$10/mes"
-          features={[
-            'Registra tus cargas de gasolina',
-            'Calcula tu MPG y tu costo por milla',
-            'Recordatorios de mantenimiento del vehículo',
-            'Ahorra dinero cuidando tu carro',
-          ]}
+          title={t.gas.title}
+          priceText={t.common.perMonth}
+          features={t.gas.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -103,6 +94,7 @@ export default function GasScreen() {
 }
 
 function GasContent() {
+  const t = useStrings();
   // Formulario de carga
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState('');
@@ -135,7 +127,14 @@ function GasContent() {
     );
     if (num(row?.n) > 0) return;
     const today = new Date();
-    for (const def of DEFAULT_MAINTENANCE) {
+    // Mismo orden que t.gas.maintTypes en el diccionario.
+    const defaults: { type: string; months: number }[] = [
+      { type: t.gas.maintTypes[0], months: 3 },
+      { type: t.gas.maintTypes[1], months: 6 },
+      { type: t.gas.maintTypes[2], months: 12 },
+      { type: t.gas.maintTypes[3], months: 12 },
+    ];
+    for (const def of defaults) {
       const id = uid();
       const due = isoDate(addMonths(today, def.months));
       await db.runAsync(
@@ -146,13 +145,13 @@ function GasContent() {
       if (when.getTime() > Date.now()) {
         await scheduleReminder(
           reminderId(id),
-          '🔧 Mantenimiento del vehículo',
-          `${def.type}: vence el ${due}`,
+          t.gas.maintTitle,
+          t.gas.maintDueMsg(def.type, due),
           when,
         );
       }
     }
-  }, []);
+  }, [t]);
 
   const loadMaintenance = useCallback(async (): Promise<MaintenanceItem[]> => {
     const rows = await getDb().getAllAsync<MaintenanceItem>(
@@ -193,27 +192,18 @@ function GasContent() {
   // ---- Guardar carga ----
   const saveFuelup = async () => {
     if (!isValidISODate(date)) {
-      Alert.alert(
-        'Fecha inválida',
-        'Escribe la fecha en formato AAAA-MM-DD (por ejemplo, 2026-10-12).',
-      );
+      Alert.alert(t.common.invalidDate, t.common.invalidDateMsg);
       return;
     }
     const a = parseNum(amount);
     const g = parseNum(gallons);
     const o = parseNum(odometer);
     if (a === null || a < 0 || g === null || o === null || o < 0) {
-      Alert.alert(
-        'Revisa los números',
-        'El monto y el odómetro deben ser ≥ 0, y los valores deben ser números válidos.',
-      );
+      Alert.alert(t.gas.checkNumbers, t.gas.checkNumbersMsg);
       return;
     }
     if (g <= 0) {
-      Alert.alert(
-        'Galones requeridos',
-        'Los galones deben ser mayores que 0 para calcular tu rendimiento.',
-      );
+      Alert.alert(t.gas.gallonsRequired, t.gas.gallonsMsg);
       return;
     }
 
@@ -227,37 +217,30 @@ function GasContent() {
       setGallons('');
       setOdometer('');
       await load();
-      Alert.alert('Guardado', 'Tu carga de gasolina se guardó correctamente.');
+      Alert.alert(t.gas.saved, t.gas.savedMsg);
     } catch {
-      Alert.alert(
-        'No se pudo guardar',
-        'Ocurrió un error al guardar la carga. Inténtalo de nuevo.',
-      );
+      Alert.alert(t.gas.saveError, t.gas.saveErrorMsg);
     } finally {
       setSaving(false);
     }
   };
 
   const removeFuelup = (id: string) => {
-    Alert.alert(
-      'Eliminar carga',
-      '¿Seguro que quieres eliminar esta carga de gasolina?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await getDb().runAsync('DELETE FROM fuelups WHERE id = ?', [id]);
-              await load();
-            } catch {
-              Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');
-            }
-          },
+    Alert.alert(t.gas.delTitle, t.gas.delMsg, [
+      { text: t.common.cancelar, style: 'cancel' },
+      {
+        text: t.common.eliminar,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await getDb().runAsync('DELETE FROM fuelups WHERE id = ?', [id]);
+            await load();
+          } catch {
+            Alert.alert(t.gas.delError, t.common.tryAgain);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   // ---- Cálculos de rendimiento ----
@@ -290,14 +273,11 @@ function GasContent() {
   const addCustomReminder = async () => {
     const type = newType.trim();
     if (!type) {
-      Alert.alert('Falta el nombre', 'Escribe qué mantenimiento quieres recordar.');
+      Alert.alert(t.gas.maintNameMissing, t.gas.maintNameMsg);
       return;
     }
     if (!isValidISODate(newDue)) {
-      Alert.alert(
-        'Fecha inválida',
-        'Escribe la fecha de vencimiento en formato AAAA-MM-DD.',
-      );
+      Alert.alert(t.common.invalidDate, t.gas.maintDateMsg);
       return;
     }
     try {
@@ -310,70 +290,70 @@ function GasContent() {
       if (when.getTime() > Date.now()) {
         await scheduleReminder(
           reminderId(id),
-          '🔧 Mantenimiento del vehículo',
-          `${type}: vence el ${newDue}`,
+          t.gas.maintTitle,
+          t.gas.maintDueMsg(type, newDue),
           when,
         );
       }
       setNewType('');
       setNewDue(todayISO());
       await refreshMaintenance();
-      Alert.alert('Agregado', 'Tu recordatorio se guardó correctamente.');
+      Alert.alert(t.gas.addedTitle, t.gas.maintSaved);
     } catch {
-      Alert.alert('No se pudo guardar', 'Inténtalo de nuevo.');
+      Alert.alert(t.gas.saveError, t.common.tryAgain);
     }
   };
 
   return (
     <View>
-      <Text style={styles.title}>⛽ Gasolina</Text>
+      <Text style={styles.title}>{t.gas.title}</Text>
 
       {/* ---------- Nueva carga ---------- */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Nueva carga</Text>
+        <Text style={styles.cardTitle}>{t.gas.newFillup}</Text>
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Fecha (AAAA-MM-DD)</Text>
+          <Text style={styles.fieldLabel}>{t.gas.fieldDateFillup}</Text>
           <TextInput
             style={styles.input}
             value={date}
             onChangeText={setDate}
             keyboardType="numbers-and-punctuation"
             placeholder="2026-10-12"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={theme.textMuted}
           />
         </View>
         <View style={styles.row3}>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Monto $</Text>
+            <Text style={styles.fieldLabel}>{t.gas.fieldAmount}</Text>
             <TextInput
               style={styles.input}
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="45.00"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.textMuted}
             />
           </View>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Galones</Text>
+            <Text style={styles.fieldLabel}>{t.gas.fieldGallons}</Text>
             <TextInput
               style={styles.input}
               value={gallons}
               onChangeText={setGallons}
               keyboardType="decimal-pad"
               placeholder="12.5"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.textMuted}
             />
           </View>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Odómetro (mi)</Text>
+            <Text style={styles.fieldLabel}>{t.gas.odometer}</Text>
             <TextInput
               style={styles.input}
               value={odometer}
               onChangeText={setOdometer}
               keyboardType="decimal-pad"
               placeholder="87250"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.textMuted}
             />
           </View>
         </View>
@@ -383,31 +363,30 @@ function GasContent() {
           disabled={saving}
         >
           <Text style={styles.saveButtonText}>
-            {saving ? 'Guardando…' : 'Guardar carga'}
+            {saving ? t.gas.savingFillup : t.gas.saveFillup}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* ---------- Rendimiento ---------- */}
-      <Text style={styles.sectionTitle}>Rendimiento</Text>
+      <Text style={styles.sectionTitle}>{t.gas.performance}</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : pairs.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>
-            🚗 Registra al menos 2 cargas con el odómetro para ver tu rendimiento
-            (MPG y costo por milla).
+            {t.gas.needTwoFillups}
           </Text>
         </View>
       ) : (
         <View style={styles.statsGrid}>
           <StatCard
-            label="Último MPG"
+            label={t.gas.lastMpg}
             value={lastMPG !== null ? lastMPG.toFixed(1) : '—'}
-            sub="Millas por galón"
+            sub={t.gas.mpgSub}
           />
           <StatCard
-            label="Costo / milla"
+            label={t.gas.costPerMile}
             value={costPerMile !== null ? fmtMoney(costPerMile) : '—'}
             sub={fmtMiles(pairMiles)}
           />
@@ -417,7 +396,7 @@ function GasContent() {
       {/* Historial de cargas */}
       {!loading && fuelups.length > 0 && (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Historial de cargas</Text>
+          <Text style={styles.cardTitle}>{t.gas.fillupHistory}</Text>
           {[...fuelups].reverse().map((f) => (
             <View key={f.id} style={styles.fuelRow}>
               <View style={styles.rowInfo}>
@@ -425,14 +404,14 @@ function GasContent() {
                   {isoDate(new Date(num(f.date)))} · {fmtMoney(num(f.amount))}
                 </Text>
                 <Text style={styles.rowSub}>
-                  {num(f.gallons).toFixed(2)} gal · {fmtMiles(num(f.odometerMiles))} odómetro
+                  {num(f.gallons).toFixed(2)} {t.gas.gallonsUnit} · {fmtMiles(num(f.odometerMiles))} {t.gas.odometerWord}
                 </Text>
               </View>
               <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => removeFuelup(f.id)}
               >
-                <Text style={styles.deleteText}>Eliminar</Text>
+                <Text style={styles.deleteText}>{t.common.eliminar}</Text>
               </TouchableOpacity>
             </View>
           ))}
@@ -440,7 +419,7 @@ function GasContent() {
       )}
 
       {/* ---------- Mantenimiento ---------- */}
-      <Text style={styles.sectionTitle}>🔧 Mantenimiento</Text>
+      <Text style={styles.sectionTitle}>{t.gas.maintShort}</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : (
@@ -448,8 +427,7 @@ function GasContent() {
           {pending.length === 0 && (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>
-                ✅ Todo al día. Agrega un recordatorio personalizado abajo si lo
-                necesitas.
+                {t.gas.allGood}
               </Text>
             </View>
           )}
@@ -463,12 +441,12 @@ function GasContent() {
 
           {doneItems.length > 0 && (
             <>
-              <Text style={styles.subSectionTitle}>Completados</Text>
+              <Text style={styles.subSectionTitle}>{t.gas.completed}</Text>
               {doneItems.map((item) => (
                 <View key={item.id} style={[styles.maintRow, styles.maintDone]}>
                   <View style={styles.rowInfo}>
                     <Text style={[styles.rowTitle, styles.strike]}>✓ {item.type}</Text>
-                    <Text style={styles.rowSub}>Vencía el {item.dueDate}</Text>
+                    <Text style={styles.rowSub}>{t.gas.overdueWas}{item.dueDate}</Text>
                   </View>
                   <DeleteMaintenanceButton
                     id={item.id}
@@ -480,30 +458,30 @@ function GasContent() {
           )}
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Agregar recordatorio personalizado</Text>
+            <Text style={styles.cardTitle}>{t.gas.addCustomReminder}</Text>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>¿Qué quieres recordar?</Text>
+              <Text style={styles.fieldLabel}>{t.gas.remindPh}</Text>
               <TextInput
                 style={styles.input}
                 value={newType}
                 onChangeText={setNewType}
-                placeholder="Ej. Cambio de frenos"
-                placeholderTextColor="#9CA3AF"
+                placeholder={t.gas.remindExample}
+                placeholderTextColor={theme.textMuted}
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Fecha de vencimiento (AAAA-MM-DD)</Text>
+              <Text style={styles.fieldLabel}>{t.gas.dueDate}</Text>
               <TextInput
                 style={styles.input}
                 value={newDue}
                 onChangeText={setNewDue}
                 keyboardType="numbers-and-punctuation"
                 placeholder="2026-12-01"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={theme.textMuted}
               />
             </View>
             <TouchableOpacity style={styles.secondaryButton} onPress={addCustomReminder}>
-              <Text style={styles.secondaryButtonText}>Agregar recordatorio</Text>
+              <Text style={styles.secondaryButtonText}>{t.gas.addReminder}</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -519,6 +497,7 @@ function MaintenanceRow({
   item: MaintenanceItem;
   onChanged: () => void;
 }) {
+  const t = useStrings();
   const [due, setDue] = useState(item.dueDate);
   const [busy, setBusy] = useState(false);
 
@@ -526,10 +505,8 @@ function MaintenanceRow({
 
   const saveDue = async () => {
     if (!isValidISODate(due)) {
-      Alert.alert(
-        'Fecha inválida',
-        'Escribe la fecha en formato AAAA-MM-DD (por ejemplo, 2026-12-01).',
-      );
+      // El mensaje del diccionario usa otro ejemplo de fecha (2026-10-12).
+      Alert.alert(t.common.invalidDate, t.common.invalidDateMsg);
       return;
     }
     setBusy(true);
@@ -542,17 +519,17 @@ function MaintenanceRow({
       if (when.getTime() > Date.now()) {
         await scheduleReminder(
           reminderId(item.id),
-          '🔧 Mantenimiento del vehículo',
-          `${item.type}: vence el ${due}`,
+          t.gas.maintTitle,
+          t.gas.maintDueMsg(item.type, due),
           when,
         );
       } else {
         await cancelReminder(reminderId(item.id));
       }
       onChanged();
-      Alert.alert('Guardado', 'La fecha de vencimiento se actualizó.');
+      Alert.alert(t.gas.saved, t.gas.dueUpdated);
     } catch {
-      Alert.alert('No se pudo guardar', 'Inténtalo de nuevo.');
+      Alert.alert(t.gas.saveError, t.common.tryAgain);
     } finally {
       setBusy(false);
     }
@@ -567,7 +544,7 @@ function MaintenanceRow({
       ]);
       onChanged();
     } catch {
-      Alert.alert('No se pudo actualizar', 'Inténtalo de nuevo.');
+      Alert.alert(t.gas.updateError, t.common.tryAgain);
     } finally {
       setBusy(false);
     }
@@ -578,7 +555,7 @@ function MaintenanceRow({
       <View style={styles.rowInfo}>
         <Text style={styles.rowTitle}>{item.type}</Text>
         <Text style={[styles.rowSub, isOverdue && styles.overdueText]}>
-          {isOverdue ? '⚠️ Vencido el ' : 'Vence el '}
+          {isOverdue ? t.gas.overduePrefix : t.gas.duePrefix}
           {item.dueDate}
         </Text>
         <View style={styles.dueEdit}>
@@ -587,15 +564,15 @@ function MaintenanceRow({
             value={due}
             onChangeText={setDue}
             keyboardType="numbers-and-punctuation"
-            placeholder="AAAA-MM-DD"
-            placeholderTextColor="#9CA3AF"
+            placeholder={t.gas.datePh}
+            placeholderTextColor={theme.textMuted}
           />
           <TouchableOpacity
             style={[styles.smallButton, busy && styles.disabled]}
             onPress={saveDue}
             disabled={busy}
           >
-            <Text style={styles.smallButtonText}>Guardar fecha</Text>
+            <Text style={styles.smallButtonText}>{t.gas.saveDate}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -605,7 +582,7 @@ function MaintenanceRow({
           onPress={markDone}
           disabled={busy}
         >
-          <Text style={styles.doneButtonText}>✓ Hecho</Text>
+          <Text style={styles.doneButtonText}>{t.gas.doneBtn}</Text>
         </TouchableOpacity>
         <DeleteMaintenanceButton id={item.id} onChanged={onChanged} />
       </View>
@@ -620,31 +597,28 @@ function DeleteMaintenanceButton({
   id: string;
   onChanged: () => void;
 }) {
+  const t = useStrings();
   const remove = () => {
-    Alert.alert(
-      'Eliminar recordatorio',
-      '¿Seguro que quieres eliminar este recordatorio?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await cancelReminder(reminderId(id));
-              await getDb().runAsync('DELETE FROM maintenance WHERE id = ?', [id]);
-              onChanged();
-            } catch {
-              Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');
-            }
-          },
+    Alert.alert(t.gas.delReminderTitle, t.gas.delReminderMsg, [
+      { text: t.common.cancelar, style: 'cancel' },
+      {
+        text: t.common.eliminar,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await cancelReminder(reminderId(id));
+            await getDb().runAsync('DELETE FROM maintenance WHERE id = ?', [id]);
+            onChanged();
+          } catch {
+            Alert.alert(t.gas.delError, t.common.tryAgain);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
   return (
     <TouchableOpacity style={styles.deleteButton} onPress={remove}>
-      <Text style={styles.deleteText}>Eliminar</Text>
+      <Text style={styles.deleteText}>{t.common.eliminar}</Text>
     </TouchableOpacity>
   );
 }
@@ -653,19 +627,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   card: {
-    backgroundColor: '#F6F7F6',
-    borderRadius: 14,
+    backgroundColor: theme.card,
+    borderRadius: theme.radiusCard,
     padding: 14,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
   },
   field: {
@@ -676,45 +652,45 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: theme.textBody,
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
   },
   row3: {
     flexDirection: 'row',
   },
   saveButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 12,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 6,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
   secondaryButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: '#00A651',
-    borderRadius: 12,
+    borderColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 4,
   },
   secondaryButtonText: {
-    color: '#00A651',
+    color: theme.primary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -724,14 +700,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
     marginTop: 6,
   },
   subSectionTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#6B7280',
+    color: theme.textMuted,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -745,7 +721,7 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   empty: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -753,14 +729,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
     textAlign: 'center',
     lineHeight: 20,
   },
   fuelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
     borderRadius: 10,
     padding: 10,
     marginBottom: 8,
@@ -771,31 +747,31 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 4,
   },
   rowSub: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   deleteButton: {
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   deleteText: {
-    color: '#DC2626',
+    color: theme.danger,
     fontSize: 14,
     fontWeight: '600',
   },
   maintRow: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
   },
   maintOverdue: {
     borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderColor: theme.dangerBg,
   },
   maintDone: {
     opacity: 0.75,
@@ -804,7 +780,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
   },
   overdueText: {
-    color: '#DC2626',
+    color: theme.danger,
     fontWeight: '700',
   },
   dueEdit: {
@@ -817,13 +793,13 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   smallButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 10,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   smallButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -833,14 +809,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   doneButton: {
-    backgroundColor: '#E8F7EE',
-    borderRadius: 10,
+    backgroundColor: theme.successBg,
+    borderRadius: theme.radiusPill,
     paddingHorizontal: 14,
     paddingVertical: 9,
     marginRight: 4,
   },
   doneButtonText: {
-    color: '#00A651',
+    color: theme.primary,
     fontSize: 14,
     fontWeight: '700',
   },

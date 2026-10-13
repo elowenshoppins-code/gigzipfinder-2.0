@@ -27,24 +27,10 @@ import {
   subscribeToolkit,
   restorePurchases,
 } from '../../src/services/monetization';
-
-const PLATFORMS = [
-  'Instacart',
-  'DoorDash',
-  'Uber Eats',
-  'Spark',
-  'Lyft',
-  'Roadie',
-  'Otro',
-];
+import { useStrings } from '../../src/i18n';
+import { theme } from '../../src/theme';
 
 type RangeMode = 'day' | 'week' | 'month';
-
-const MODES: { key: RangeMode; label: string }[] = [
-  { key: 'day', label: 'Día' },
-  { key: 'week', label: 'Semana' },
-  { key: 'month', label: 'Mes' },
-];
 
 function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -102,13 +88,14 @@ function Field({
         onChangeText={onChange}
         keyboardType={keyboard}
         placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={theme.textMuted}
       />
     </View>
   );
 }
 
 export default function EarningsScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   return (
@@ -117,14 +104,9 @@ export default function EarningsScreen() {
         <EarningsContent />
       ) : (
         <Paywall
-          title="Ganancias"
-          priceText="$10/mes"
-          features={[
-            'Registra tus ganancias diarias por plataforma',
-            'Calcula tu bruto y neto por hora y por milla',
-            'Compara tus días, semanas y meses',
-            'Historial completo con opción de eliminar registros',
-          ]}
+          title={t.earnings.paywallTitle}
+          priceText={t.common.perMonth}
+          features={t.earnings.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -140,6 +122,24 @@ export default function EarningsScreen() {
 }
 
 function EarningsContent() {
+  const t = useStrings();
+
+  const PLATFORMS = [
+    'Instacart',
+    'DoorDash',
+    'Uber Eats',
+    'Spark',
+    'Lyft',
+    'Roadie',
+    t.earnings.platformOther,
+  ];
+
+  const MODES: { key: RangeMode; label: string }[] = [
+    { key: 'day', label: t.earnings.modeDay },
+    { key: 'week', label: t.earnings.modeWeek },
+    { key: 'month', label: t.earnings.modeMonth },
+  ];
+
   const [date, setDate] = useState(todayISO());
   const [platform, setPlatform] = useState(PLATFORMS[0]);
   const [zone, setZone] = useState('');
@@ -186,39 +186,30 @@ function EarningsContent() {
 
   const save = async () => {
     if (!isValidISODate(date)) {
-      Alert.alert(
-        'Fecha inválida',
-        'Escribe la fecha en formato AAAA-MM-DD (por ejemplo, 2026-10-12).',
-      );
+      Alert.alert(t.common.invalidDate, t.common.invalidDateMsg);
       return;
     }
-    const fields: [string, string][] = [
-      ['Ganancias', earnings],
-      ['Propinas', tips],
-      ['Millas', miles],
-      ['Horas', hours],
-      ['Minutos de espera', waitMinutes],
-      ['Gasolina', gas],
-      ['Peajes', tolls],
-      ['Estacionamiento', parking],
+    const fields: [key: string, label: string, raw: string][] = [
+      ['earnings', t.earnings.fEarnings, earnings],
+      ['tips', t.earnings.fTips, tips],
+      ['miles', t.earnings.fMiles, miles],
+      ['hours', t.earnings.fHours, hours],
+      ['wait', t.earnings.fWait, waitMinutes],
+      ['gas', t.earnings.fGas, gas],
+      ['tolls', t.earnings.fTolls, tolls],
+      ['parking', t.earnings.fParking, parking],
     ];
     const parsed: Record<string, number> = {};
-    for (const [label, raw] of fields) {
+    for (const [key, label, raw] of fields) {
       const v = parseNum(raw);
       if (v === null || v < 0) {
-        Alert.alert(
-          'Revisa los números',
-          `"${label}" debe ser un número mayor o igual a 0.`,
-        );
+        Alert.alert(t.earnings.checkNumbers, t.earnings.checkNumbersMsg(label));
         return;
       }
-      parsed[label] = v;
+      parsed[key] = v;
     }
-    if (parsed['Horas'] <= 0) {
-      Alert.alert(
-        'Horas requeridas',
-        'Las horas deben ser mayores que 0 para calcular tus promedios.',
-      );
+    if (parsed['hours'] <= 0) {
+      Alert.alert(t.earnings.hoursRequired, t.earnings.hoursRequiredMsg);
       return;
     }
 
@@ -233,14 +224,14 @@ function EarningsContent() {
           date,
           platform,
           zone.trim() ? zone.trim() : null,
-          parsed['Ganancias'],
-          parsed['Propinas'],
-          parsed['Millas'],
-          parsed['Horas'],
-          parsed['Minutos de espera'],
-          parsed['Gasolina'],
-          parsed['Peajes'],
-          parsed['Estacionamiento'],
+          parsed['earnings'],
+          parsed['tips'],
+          parsed['miles'],
+          parsed['hours'],
+          parsed['wait'],
+          parsed['gas'],
+          parsed['tolls'],
+          parsed['parking'],
         ],
       );
       setEarnings('');
@@ -252,44 +243,34 @@ function EarningsContent() {
       setTolls('');
       setParking('');
       await load();
-      Alert.alert('Guardado', 'Tu registro de ganancias se guardó correctamente.');
+      Alert.alert(t.earnings.saved, t.earnings.savedMsg);
     } catch {
-      Alert.alert(
-        'No se pudo guardar',
-        'Ocurrió un error al guardar el registro. Inténtalo de nuevo.',
-      );
+      Alert.alert(t.earnings.saveError, t.earnings.saveErrorMsg);
     } finally {
       setSaving(false);
     }
   };
 
   const removeEntry = (id: string) => {
-    Alert.alert(
-      'Eliminar registro',
-      '¿Seguro que quieres eliminar este registro? Esta acción no se puede deshacer.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await getDb().runAsync('DELETE FROM earnings WHERE id = ?', [id]);
-              await load();
-            } catch {
-              Alert.alert(
-                'No se pudo eliminar',
-                'Ocurrió un error al eliminar el registro.',
-              );
-            }
-          },
+    Alert.alert(t.earnings.delTitle, t.earnings.delMsg, [
+      { text: t.common.cancelar, style: 'cancel' },
+      {
+        text: t.common.eliminar,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await getDb().runAsync('DELETE FROM earnings WHERE id = ?', [id]);
+            await load();
+          } catch {
+            Alert.alert(t.earnings.delError, t.earnings.delErrorMsg);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   // ---- Agregados del rango ----
-  const t = entries.reduce(
+  const agg = entries.reduce(
     (a, e) => ({
       earnings: a.earnings + num(e.earnings),
       tips: a.tips + num(e.tips),
@@ -303,36 +284,41 @@ function EarningsContent() {
     { earnings: 0, tips: 0, miles: 0, hours: 0, waitMinutes: 0, gas: 0, tolls: 0, parking: 0 },
   );
 
-  const gross = t.earnings + t.tips;
-  const perHour = t.hours > 0 ? gross / t.hours : 0;
-  const perMile = t.miles > 0 ? gross / t.miles : 0;
-  const gasPerMile = t.miles > 0 ? t.gas / t.miles : 0;
-  const net = gross - t.gas - t.tolls - t.parking;
-  const netPerHour = t.hours > 0 ? net / t.hours : 0;
+  const gross = agg.earnings + agg.tips;
+  const perHour = agg.hours > 0 ? gross / agg.hours : 0;
+  const perMile = agg.miles > 0 ? gross / agg.miles : 0;
+  const gasPerMile = agg.miles > 0 ? agg.gas / agg.miles : 0;
+  const net = gross - agg.gas - agg.tolls - agg.parking;
+  const netPerHour = agg.hours > 0 ? net / agg.hours : 0;
 
-  const modeLabel = mode === 'day' ? 'del día' : mode === 'week' ? 'de la semana' : 'del mes';
+  const modeLabel =
+    mode === 'day'
+      ? t.earnings.modeLabelDay
+      : mode === 'week'
+        ? t.earnings.modeLabelWeek
+        : t.earnings.modeLabelMonth;
 
   return (
     <View>
-      <Text style={styles.title}>💰 Ganancias</Text>
+      <Text style={styles.title}>{t.earnings.title}</Text>
 
       {/* ---------- Formulario ---------- */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Registrar turno</Text>
+        <Text style={styles.cardTitle}>{t.earnings.formTitle}</Text>
 
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Fecha (AAAA-MM-DD)</Text>
+          <Text style={styles.fieldLabel}>{t.earnings.fieldDate}</Text>
           <TextInput
             style={styles.input}
             value={date}
             onChangeText={setDate}
             keyboardType="numbers-and-punctuation"
-            placeholder="2026-10-12"
-            placeholderTextColor="#9CA3AF"
+            placeholder={t.earnings.datePh}
+            placeholderTextColor={theme.textMuted}
           />
         </View>
 
-        <Text style={styles.fieldLabel}>Plataforma</Text>
+        <Text style={styles.fieldLabel}>{t.earnings.fieldPlatform}</Text>
         <View style={styles.chips}>
           {PLATFORMS.map((p) => (
             <TouchableOpacity
@@ -348,25 +334,25 @@ function EarningsContent() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Zona (opcional, ej. Orlando)</Text>
+          <Text style={styles.fieldLabel}>{t.earnings.fieldZone}</Text>
           <TextInput
             style={styles.input}
             value={zone}
             onChangeText={setZone}
-            placeholder="Orlando"
-            placeholderTextColor="#9CA3AF"
+            placeholder={t.earnings.zonePh}
+            placeholderTextColor={theme.textMuted}
           />
         </View>
 
         <View style={styles.grid}>
-          <Field label="Ganancias $" value={earnings} onChange={setEarnings} />
-          <Field label="Propinas $" value={tips} onChange={setTips} />
-          <Field label="Millas" value={miles} onChange={setMiles} />
-          <Field label="Horas" value={hours} onChange={setHours} />
-          <Field label="Espera (min)" value={waitMinutes} onChange={setWaitMinutes} />
-          <Field label="Gasolina $" value={gas} onChange={setGas} />
-          <Field label="Peajes $" value={tolls} onChange={setTolls} />
-          <Field label="Estacionamiento $" value={parking} onChange={setParking} />
+          <Field label={t.earnings.fEarnings} value={earnings} onChange={setEarnings} />
+          <Field label={t.earnings.fTips} value={tips} onChange={setTips} />
+          <Field label={t.earnings.fMiles} value={miles} onChange={setMiles} />
+          <Field label={t.earnings.fHours} value={hours} onChange={setHours} />
+          <Field label={t.earnings.fWait} value={waitMinutes} onChange={setWaitMinutes} />
+          <Field label={t.earnings.fGas} value={gas} onChange={setGas} />
+          <Field label={t.earnings.fTolls} value={tolls} onChange={setTolls} />
+          <Field label={t.earnings.fParking} value={parking} onChange={setParking} />
         </View>
 
         <TouchableOpacity
@@ -375,7 +361,7 @@ function EarningsContent() {
           disabled={saving}
         >
           <Text style={styles.saveButtonText}>
-            {saving ? 'Guardando…' : 'Guardar turno'}
+            {saving ? t.earnings.saving : t.earnings.saveShift}
           </Text>
         </TouchableOpacity>
       </View>
@@ -421,33 +407,31 @@ function EarningsContent() {
       </View>
 
       {/* ---------- Estadísticas ---------- */}
-      <Text style={styles.sectionTitle}>Resumen {modeLabel}</Text>
+      <Text style={styles.sectionTitle}>{t.earnings.summaryTitle(modeLabel)}</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : entries.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>
-            🚗 Aún no tienes registros en este período.{'\n'}Agrega tu primer turno arriba.
-          </Text>
+          <Text style={styles.emptyText}>{t.earnings.emptyPeriod}</Text>
         </View>
       ) : (
         <View style={styles.statsGrid}>
-          <StatCard label="Bruto / hora" value={fmtMoney(perHour)} sub={`${entries.length} registro(s)`} />
-          <StatCard label="Neto estimado" value={fmtMoney(net)} sub="Bruto − gasolina − peajes − estac." />
-          <StatCard label="Neto / hora" value={fmtMoney(netPerHour)} />
-          <StatCard label="Bruto / milla" value={fmtMoney(perMile)} />
-          <StatCard label="Gasolina / milla" value={fmtMoney(gasPerMile)} sub={fmtMiles(t.miles)} />
-          <StatCard label="Bruto total" value={fmtMoney(gross)} sub={`${t.hours.toFixed(1)} h trabajadas`} />
+          <StatCard label={t.earnings.statGrossHour} value={fmtMoney(perHour)} sub={t.earnings.recordsCount(entries.length)} />
+          <StatCard label={t.earnings.statNet} value={fmtMoney(net)} sub={t.earnings.netSub} />
+          <StatCard label={t.earnings.statNetHour} value={fmtMoney(netPerHour)} />
+          <StatCard label={t.earnings.statGrossMile} value={fmtMoney(perMile)} />
+          <StatCard label={t.earnings.statGasMile} value={fmtMoney(gasPerMile)} sub={fmtMiles(agg.miles)} />
+          <StatCard label={t.earnings.statGrossTotal} value={fmtMoney(gross)} sub={t.earnings.hoursWorked(agg.hours.toFixed(1))} />
         </View>
       )}
 
       {/* ---------- Lista ---------- */}
-      <Text style={styles.sectionTitle}>Registros</Text>
+      <Text style={styles.sectionTitle}>{t.earnings.listTitle}</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : entries.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No hay registros para mostrar.</Text>
+          <Text style={styles.emptyText}>{t.earnings.emptyList}</Text>
         </View>
       ) : (
         entries.map((e) => (
@@ -459,15 +443,15 @@ function EarningsContent() {
               </Text>
               <Text style={styles.rowSub}>
                 {fmtMoney(num(e.earnings) + num(e.tips))} · {fmtMiles(num(e.miles))} ·{' '}
-                {num(e.hours).toFixed(1)} h
-                {num(e.waitMinutes) > 0 ? ` · ${num(e.waitMinutes).toFixed(0)} min espera` : ''}
+                {num(e.hours).toFixed(1)} {t.earnings.hoursUnit}
+                {num(e.waitMinutes) > 0 ? t.earnings.waitMin(num(e.waitMinutes).toFixed(0)) : ''}
               </Text>
             </View>
             <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => removeEntry(e.id)}
             >
-              <Text style={styles.deleteText}>Eliminar</Text>
+              <Text style={styles.deleteText}>{t.earnings.deleteBtn}</Text>
             </TouchableOpacity>
           </View>
         ))
@@ -480,19 +464,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   card: {
-    backgroundColor: '#F6F7F6',
-    borderRadius: 14,
+    backgroundColor: theme.card,
+    borderRadius: theme.radiusCard,
     padding: 14,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
   },
   field: {
@@ -504,18 +490,18 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: theme.textBody,
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
   },
   chips: {
     flexDirection: 'row',
@@ -525,23 +511,23 @@ const styles = StyleSheet.create({
   chip: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     paddingHorizontal: 12,
     paddingVertical: 7,
     marginRight: 8,
     marginBottom: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
   },
   chipActive: {
-    backgroundColor: '#00A651',
-    borderColor: '#00A651',
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   chipText: {
     fontSize: 14,
-    color: '#374151',
+    color: theme.textBody,
   },
   chipTextActive: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontWeight: '700',
   },
   grid: {
@@ -549,14 +535,14 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   saveButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 12,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 6,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -565,7 +551,7 @@ const styles = StyleSheet.create({
   },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 4,
     marginBottom: 10,
@@ -577,7 +563,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -585,11 +571,11 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
     fontWeight: '600',
   },
   segmentTextActive: {
-    color: '#0A0A0A',
+    color: theme.text,
     fontWeight: '700',
   },
   dateNav: {
@@ -599,8 +585,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   navButton: {
-    backgroundColor: '#F6F7F6',
-    borderRadius: 10,
+    backgroundColor: theme.card,
+    borderRadius: theme.radiusPill,
     width: 40,
     height: 40,
     alignItems: 'center',
@@ -610,19 +596,19 @@ const styles = StyleSheet.create({
   navButtonText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#00A651',
+    color: theme.primary,
   },
   dateText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     minWidth: 120,
     textAlign: 'center',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
     marginTop: 6,
   },
@@ -636,7 +622,7 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   empty: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -644,14 +630,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
     textAlign: 'center',
     lineHeight: 20,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -662,19 +648,19 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 4,
   },
   rowSub: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   deleteButton: {
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   deleteText: {
-    color: '#DC2626',
+    color: theme.danger,
     fontSize: 14,
     fontWeight: '600',
   },

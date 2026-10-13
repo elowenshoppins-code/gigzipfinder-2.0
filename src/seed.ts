@@ -13,6 +13,7 @@
 import { getDb, setSetting, getSetting, type MaintenanceItem, type DocRecord } from './db/database';
 import { uid, isoDate } from './utils/format';
 import { scheduleReminder, cancelReminder } from './services/notifications';
+import { getStrings } from './i18n';
 
 const SEED_KEY = 'seeded_v1';
 const DEMO = 1;
@@ -32,6 +33,7 @@ export async function seedIfNeeded(): Promise<void> {
     if (seeded === '1') return;
 
     const db = getDb();
+    const t = getStrings().seed;
     const today = new Date();
 
     /* ---- Earnings: 7 días (2026-10-05 a 2026-10-11), zona Orlando ---- */
@@ -107,22 +109,22 @@ export async function seedIfNeeded(): Promise<void> {
     const maintenanceRows: Array<
       Omit<MaintenanceItem, 'done' | 'isDemo'> & { done: number; isDemo: number }
     > = [
-      { id: uid(), type: 'Cambio de aceite', dueDate: '2026-11-01', done: 0, isDemo: DEMO },
-      { id: uid(), type: 'Renovación de registro', dueDate: '2026-12-15', done: 0, isDemo: DEMO },
+      { id: uid(), type: t.maintOil, dueDate: '2026-11-01', done: 0, isDemo: DEMO },
+      { id: uid(), type: t.maintReg, dueDate: '2026-12-15', done: 0, isDemo: DEMO },
     ];
 
     /* ---- Zipcodes demo ---- */
     const zipRows = [
-      { code: '32801', app: 'instacart', notes: 'Centro de Orlando — alta demanda' },
-      { code: '32803', app: 'doordash', notes: 'Orlando este — buena disponibilidad' },
-      { code: '32805', app: 'spark', notes: 'Orlando oeste — zona activa' },
+      { code: '32801', app: 'instacart', notes: t.zipNote1 },
+      { code: '32803', app: 'doordash', notes: t.zipNote2 },
+      { code: '32805', app: 'spark', notes: t.zipNote3 },
     ].map((z) => ({ id: uid(), code: z.code, app: z.app, notes: z.notes }));
 
     /* ---- Documento demo ---- */
     const docId = uid();
     const docRow: DocRecord = {
       id: docId,
-      name: 'Seguro del vehículo',
+      name: t.docName,
       type: 'seguro',
       uri: '',
       expiryDate: '2026-11-04',
@@ -175,15 +177,15 @@ export async function seedIfNeeded(): Promise<void> {
     /* ---- Recordatorios demo: 7 días antes del vencimiento ---- */
     await scheduleReminder(
       `doc_${docId}`,
-      'Documento por vencer',
-      'Seguro del vehículo vence en 7 días',
+      t.notifDocTitle,
+      t.notifDueMsg(t.docName),
       reminderDate('2026-11-04'),
     );
     for (const m of maintenanceRows) {
       await scheduleReminder(
         `maint_${m.id}`,
-        'Mantenimiento próximo',
-        `${m.type} vence en 7 días`,
+        t.notifMaintTitle,
+        t.notifDueMsg(m.type),
         reminderDate(m.dueDate),
       );
     }

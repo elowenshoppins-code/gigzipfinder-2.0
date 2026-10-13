@@ -37,18 +37,10 @@ import {
   subscribeToolkit,
   useToolkitAccess,
 } from '../src/services/monetization';
+import { useStrings, type Strings } from '../src/i18n';
+import { theme } from '../src/theme';
 
-const GREEN = '#00A651';
-
-const DOC_TYPES = [
-  'Licencia',
-  'Registro',
-  'Seguro',
-  'Vehículo',
-  'Impuestos',
-  'Desactivación',
-  'Otro',
-];
+const GREEN = theme.primary;
 
 /** 'AAAA-MM-DD' válido (formato y fecha real). */
 function isValidISODate(s: string): boolean {
@@ -64,20 +56,23 @@ function isValidISODate(s: string): boolean {
 
 type ExpiryState = 'expired' | 'soon' | 'ok' | 'none' | 'invalid';
 
-function expiryState(expiryDate: string | null): {
+function expiryState(
+  t: Strings,
+  expiryDate: string | null,
+): {
   state: ExpiryState;
   text: string;
 } {
-  if (!expiryDate) return { state: 'none', text: 'Sin vencimiento' };
-  if (!isValidISODate(expiryDate)) return { state: 'invalid', text: 'Fecha inválida' };
+  if (!expiryDate) return { state: 'none', text: t.vault.noExpiry };
+  if (!isValidISODate(expiryDate))
+    return { state: 'invalid', text: t.common.invalidDate };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const exp = new Date(`${expiryDate}T00:00:00`);
   const days = Math.round((exp.getTime() - today.getTime()) / 86400000);
-  if (days < 0) return { state: 'expired', text: 'Vencido' };
-  if (days <= 30)
-    return { state: 'soon', text: `Vence en ${days} día${days === 1 ? '' : 's'}` };
-  return { state: 'ok', text: `Vigente · ${days} días` };
+  if (days < 0) return { state: 'expired', text: t.vault.expired };
+  if (days <= 30) return { state: 'soon', text: t.vault.expiresIn(days) };
+  return { state: 'ok', text: t.vault.validFor(days) };
 }
 
 const EXPIRY_ICON: Record<ExpiryState, string> = {
@@ -89,32 +84,26 @@ const EXPIRY_ICON: Record<ExpiryState, string> = {
 };
 
 export default function VaultScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   const handleRestore = useCallback(async () => {
     try {
       await restorePurchases();
       refreshAccess();
-      Alert.alert(
-        'Compras restauradas',
-        'Si tenías una suscripción activa, ya puedes usar la Bóveda.',
-      );
+      Alert.alert(t.vault.restoredTitle, t.vault.restoreMsg);
     } catch {
-      Alert.alert('Error', 'No se pudieron restaurar las compras.');
+      Alert.alert(t.common.error, t.common.restoreFailed);
     }
-  }, [refreshAccess]);
+  }, [t, refreshAccess]);
 
   if (!hasAccess) {
     return (
       <Screen>
         <Paywall
           title="Document Vault"
-          priceText="$10/mes"
-          features={[
-            'Guarda licencia, seguro, registro y más en un solo lugar',
-            'Alertas automáticas antes de que venzan tus documentos',
-            'Abre tus documentos cuando los necesites',
-          ]}
+          priceText={t.common.perMonth}
+          features={t.vault.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -129,11 +118,12 @@ export default function VaultScreen() {
 }
 
 function VaultContent() {
+  const t = useStrings();
   const [docs, setDocs] = useState<DocRecord[]>([]);
   const [adding, setAdding] = useState(false);
   const [uri, setUri] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [type, setType] = useState(DOC_TYPES[0]);
+  const [type, setType] = useState(t.vault.docTypes[0]);
   const [expiry, setExpiry] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -156,7 +146,7 @@ function VaultContent() {
   const startAdd = () => {
     setUri(null);
     setName('');
-    setType(DOC_TYPES[0]);
+    setType(t.vault.docTypes[0]);
     setExpiry('');
     setAdding(true);
   };
@@ -170,9 +160,9 @@ function VaultContent() {
       if (res.canceled || !res.assets || res.assets.length === 0) return;
       const asset = res.assets[0];
       setUri(asset.uri);
-      if (!name) setName(asset.name ?? 'Documento');
+      if (!name) setName(asset.name ?? t.vault.defaultDocName);
     } catch {
-      Alert.alert('Error', 'No se pudo seleccionar el archivo.');
+      Alert.alert(t.common.error, t.vault.pickError);
     }
   };
 
@@ -180,10 +170,7 @@ function VaultContent() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert(
-          'Permiso necesario',
-          'Permite el acceso a tus fotos para guardar el documento.',
-        );
+        Alert.alert(t.vault.permNeeded, t.vault.photoPerm);
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -194,30 +181,27 @@ function VaultContent() {
       const asset = res.assets[0];
       setUri(asset.uri);
       if (!name) {
-        const fileName = asset.uri.split('/').pop() ?? 'Documento';
+        const fileName = asset.uri.split('/').pop() ?? t.vault.defaultDocName;
         setName(fileName);
       }
     } catch {
-      Alert.alert('Error', 'No se pudo seleccionar la imagen.');
+      Alert.alert(t.common.error, t.vault.imageError);
     }
   };
 
   const handleSave = async () => {
     if (!uri) {
-      Alert.alert('Falta el documento', 'Sube un archivo o una imagen primero.');
+      Alert.alert(t.vault.missingDoc, t.vault.missingDocMsg);
       return;
     }
     const finalName = name.trim();
     if (finalName === '') {
-      Alert.alert('Falta el nombre', 'Ponle un nombre a tu documento.');
+      Alert.alert(t.vault.missingName, t.vault.missingNameMsg);
       return;
     }
     const finalExpiry = expiry.trim();
     if (finalExpiry !== '' && !isValidISODate(finalExpiry)) {
-      Alert.alert(
-        'Fecha inválida',
-        'Usa el formato AAAA-MM-DD (ej.: 2026-12-31) o déjalo vacío.',
-      );
+      Alert.alert(t.common.invalidDate, t.vault.invalidDateMsg);
       return;
     }
     setSaving(true);
@@ -235,17 +219,17 @@ function VaultContent() {
         if (remindAt.getTime() > Date.now()) {
           await scheduleReminder(
             `doc_${id}`,
-            'Documento por vencer',
-            `Tu ${finalName} vence en 7 días`,
+            t.vault.docExpiring,
+            t.vault.docExpiringMsg(finalName),
             remindAt,
           );
         }
       }
       setAdding(false);
       await loadDocs();
-      Alert.alert('Guardado', 'Tu documento se guardó en la bóveda.');
+      Alert.alert(t.vault.savedTitle, t.vault.docSavedMsg);
     } catch {
-      Alert.alert('Error', 'No se pudo guardar el documento.');
+      Alert.alert(t.common.error, t.vault.docSaveError);
     } finally {
       setSaving(false);
     }
@@ -259,31 +243,27 @@ function VaultContent() {
         await Linking.openURL(doc.uri);
       }
     } catch {
-      Alert.alert('Error', 'No se pudo abrir el documento.');
+      Alert.alert(t.common.error, t.vault.openError);
     }
   };
 
   const handleDelete = (doc: DocRecord) => {
-    Alert.alert(
-      'Eliminar documento',
-      `¿Eliminar "${doc.name}" de la bóveda?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await cancelReminder(`doc_${doc.id}`);
-              getDb().runSync('DELETE FROM documents WHERE id = ?', [doc.id]);
-              await loadDocs();
-            } catch {
-              Alert.alert('Error', 'No se pudo eliminar el documento.');
-            }
-          },
+    Alert.alert(t.vault.delTitle, t.vault.delDoc(doc.name), [
+      { text: t.common.cancelar, style: 'cancel' },
+      {
+        text: t.common.eliminar,
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await cancelReminder(`doc_${doc.id}`);
+            getDb().runSync('DELETE FROM documents WHERE id = ?', [doc.id]);
+            await loadDocs();
+          } catch {
+            Alert.alert(t.common.error, t.vault.delError);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
@@ -292,67 +272,65 @@ function VaultContent() {
         <Text style={styles.heading}>Document Vault</Text>
         {!adding && (
           <TouchableOpacity onPress={startAdd}>
-            <Text style={styles.linkBtn}>＋ Agregar</Text>
+            <Text style={styles.linkBtn}>＋ {t.common.agregar}</Text>
           </TouchableOpacity>
         )}
       </View>
 
       {adding ? (
         <View>
-          <Text style={styles.stepTitle}>Nuevo documento</Text>
+          <Text style={styles.stepTitle}>{t.vault.newDoc}</Text>
           <View style={styles.row}>
             <TouchableOpacity
               style={[styles.secondaryBtn, styles.rowBtn]}
               onPress={pickFile}
             >
-              <Text style={styles.secondaryBtnText}>📄 Subir archivo</Text>
+              <Text style={styles.secondaryBtnText}>{t.vault.uploadFile}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.secondaryBtn, styles.rowBtn]}
               onPress={pickImage}
             >
-              <Text style={styles.secondaryBtnText}>🖼️ Subir imagen</Text>
+              <Text style={styles.secondaryBtnText}>{t.vault.uploadImage}</Text>
             </TouchableOpacity>
           </View>
-          {uri && <Text style={styles.body}>✅ Documento listo para guardar.</Text>}
+          {uri && <Text style={styles.body}>{t.vault.docReady}</Text>}
 
-          <Text style={styles.label}>Nombre</Text>
+          <Text style={styles.label}>{t.vault.nameLabel}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Ej.: Licencia de conducir"
+            placeholder={t.vault.nameExample}
             value={name}
             onChangeText={setName}
           />
 
-          <Text style={styles.label}>Tipo</Text>
+          <Text style={styles.label}>{t.vault.docType}</Text>
           <View style={styles.chips}>
-            {DOC_TYPES.map((t) => (
+            {t.vault.docTypes.map((dt) => (
               <TouchableOpacity
-                key={t}
-                style={[styles.chip, type === t && styles.chipActive]}
-                onPress={() => setType(t)}
+                key={dt}
+                style={[styles.chip, type === dt && styles.chipActive]}
+                onPress={() => setType(dt)}
               >
                 <Text
-                  style={[styles.chipText, type === t && styles.chipTextActive]}
+                  style={[styles.chipText, type === dt && styles.chipTextActive]}
                 >
-                  {t}
+                  {dt}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <Text style={styles.label}>Fecha de vencimiento (opcional)</Text>
+          <Text style={styles.label}>{t.vault.expiryOptional}</Text>
           <TextInput
             style={styles.input}
-            placeholder="AAAA-MM-DD · Ej.: 2026-12-31"
+            placeholder={t.vault.dateExamplePh}
             value={expiry}
             onChangeText={setExpiry}
             keyboardType="numbers-and-punctuation"
             maxLength={10}
           />
-          <Text style={styles.hint}>
-            Te avisaremos 7 días antes de que venza.
-          </Text>
+          <Text style={styles.hint}>{t.vault.remindNote}</Text>
 
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -360,29 +338,28 @@ function VaultContent() {
             disabled={saving}
           >
             <Text style={styles.primaryBtnText}>
-              {saving ? 'Guardando…' : 'Guardar documento'}
+              {saving ? t.vault.savingDoc : t.vault.saveDoc}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.ghostBtn}
             onPress={() => setAdding(false)}
           >
-            <Text style={styles.ghostBtnText}>Cancelar</Text>
+            <Text style={styles.ghostBtnText}>{t.common.cancelar}</Text>
           </TouchableOpacity>
         </View>
       ) : docs.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.body}>
-            Aún no tienes documentos guardados. Agrega tu licencia, seguro,
-            registro y más para tenerlos siempre a la mano.
+            {t.vault.emptyVaultMsg}
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={startAdd}>
-            <Text style={styles.primaryBtnText}>Agregar documento</Text>
+            <Text style={styles.primaryBtnText}>{t.vault.addDoc}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         docs.map((doc) => {
-          const exp = expiryState(doc.expiryDate);
+          const exp = expiryState(t, doc.expiryDate);
           return (
             <View key={doc.id} style={styles.docItem}>
               <TouchableOpacity
@@ -419,7 +396,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   linkBtn: {
     fontSize: 15,
@@ -429,37 +406,37 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   body: {
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
     lineHeight: 22,
   },
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 6,
     marginTop: 8,
   },
   hint: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
     marginBottom: 12,
     marginTop: -4,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 16,
     marginBottom: 8,
-    color: '#0A0A0A',
-    backgroundColor: '#FFFFFF',
+    color: theme.text,
+    backgroundColor: theme.card,
   },
   chips: {
     flexDirection: 'row',
@@ -468,7 +445,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -477,11 +454,11 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: GREEN,
-    backgroundColor: '#EAF7EF',
+    backgroundColor: theme.successBg,
   },
   chipText: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
   },
   chipTextActive: {
     color: GREEN,
@@ -496,7 +473,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   primaryBtnText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -519,7 +496,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   ghostBtnText: {
-    color: '#6B7280',
+    color: theme.textMuted,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -538,11 +515,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
   },
   docMain: {
     flex: 1,
@@ -550,17 +527,17 @@ const styles = StyleSheet.create({
   docName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 2,
   },
   docType: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
     marginBottom: 4,
   },
   docExpiry: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
     fontWeight: '600',
   },
   deleteBtn: {

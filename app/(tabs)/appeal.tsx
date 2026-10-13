@@ -47,6 +47,8 @@ import {
 } from '../../src/services/appeal';
 import type { AppealAnswers } from '../../src/services/appeal';
 import type { AppealRecord } from '../../src/db/database';
+import { useStrings } from '../../src/i18n';
+import { theme } from '../../src/theme';
 
 type Step = 'platform' | 'photo' | 'wizard' | 'letter' | 'history';
 
@@ -58,37 +60,29 @@ const EMPTY_ANSWERS: AppealAnswers = {
   pedido: '',
 };
 
-const GREEN = '#00A651';
+const GREEN = theme.primary;
 
 export default function AppealScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   const handleRestore = useCallback(async () => {
     try {
       await restorePurchases();
       refreshAccess();
-      Alert.alert(
-        'Compras restauradas',
-        'Si tenías una suscripción activa, ya puedes usar la Apelación AI.',
-      );
+      Alert.alert(t.settings.restored, t.appeal.restoreMsg);
     } catch {
-      Alert.alert('Error', 'No se pudieron restaurar las compras.');
+      Alert.alert(t.common.error, t.common.restoreFailed);
     }
-  }, [refreshAccess]);
+  }, [refreshAccess, t]);
 
   if (!hasAccess) {
     return (
       <Screen>
         <Paywall
-          title="Apelación AI"
-          priceText="$10/mes"
-          features={[
-            'Asistente paso a paso para apelar desactivaciones',
-            'Cartas formales en español e inglés listas para enviar',
-            'Análisis de tu notificación de desactivación',
-            'Enlaces oficiales de apelación por plataforma',
-            'Historial de tus apelaciones',
-          ]}
+          title={t.appeal.paywallTitle}
+          priceText={t.common.perMonth}
+          features={t.appeal.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -103,6 +97,7 @@ export default function AppealScreen() {
 }
 
 function AppealFlow() {
+  const t = useStrings();
   const [step, setStep] = useState<Step>('platform');
   const [platformId, setPlatformId] = useState<string>(PLATFORMS[0].id);
   const [answers, setAnswers] = useState<AppealAnswers>(EMPTY_ANSWERS);
@@ -152,10 +147,7 @@ function AppealFlow() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert(
-          'Permiso necesario',
-          'Permite el acceso a tus fotos para analizar la captura de la notificación.',
-        );
+        Alert.alert(t.appeal.permNeeded, t.appeal.photoPerm);
         return;
       }
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -171,7 +163,7 @@ function AppealFlow() {
       setAnalysisNote(result.note);
       setSelectedReasons([]);
     } catch {
-      Alert.alert('Error', 'No se pudo procesar la imagen.');
+      Alert.alert(t.common.error, t.appeal.photoError);
     } finally {
       setAnalyzing(false);
     }
@@ -196,10 +188,7 @@ function AppealFlow() {
     const value = answers[currentQ.key].trim();
     // 'evidencia' es opcional; el resto es obligatorio para generar la carta.
     if (currentQ.key !== 'evidencia' && value === '') {
-      Alert.alert(
-        'Falta información',
-        'Responde la pregunta para continuar (o vuelve atrás).',
-      );
+      Alert.alert(t.appeal.missingInfo, t.appeal.missingInfoMsg);
       return;
     }
     if (qIndex < questions.length - 1) {
@@ -218,27 +207,27 @@ function AppealFlow() {
   const copyLetter = async () => {
     try {
       await Clipboard.setStringAsync(letter);
-      Alert.alert('¡Copiado!', 'La carta se copió al portapapeles.');
+      Alert.alert(t.common.copiado, t.appeal.copiedMsg);
     } catch {
-      Alert.alert('Error', 'No se pudo copiar la carta.');
+      Alert.alert(t.common.error, t.appeal.copyError);
     }
   };
 
   const openOfficialLink = async () => {
     const url = OFFICIAL_LINKS[platformId];
     if (!url) {
-      Alert.alert('Sin enlace', 'No hay enlace oficial para esta plataforma.');
+      Alert.alert(t.appeal.noLink, t.appeal.noLinkMsg);
       return;
     }
     try {
       const supported = await Linking.canOpenURL(url);
       if (!supported) {
-        Alert.alert('Error', 'No se pudo abrir el enlace.');
+        Alert.alert(t.common.error, t.appeal.openLinkError);
         return;
       }
       await Linking.openURL(url);
     } catch {
-      Alert.alert('Error', 'No se pudo abrir el enlace.');
+      Alert.alert(t.common.error, t.appeal.openLinkError);
     }
   };
 
@@ -247,20 +236,20 @@ function AppealFlow() {
     try {
       await saveAppeal(platformId, answers, letterEs, letterEn);
       await loadHistory();
-      Alert.alert('Guardada', 'Tu apelación se guardó en el historial.');
+      Alert.alert(t.appeal.savedTitle, t.appeal.savedHistory);
       setStep('history');
     } catch {
-      Alert.alert('Error', 'No se pudo guardar la apelación.');
+      Alert.alert(t.common.error, t.appeal.saveHistoryError);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert('Eliminar', '¿Eliminar esta apelación del historial?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t.common.eliminar, t.appeal.confirmDelete, [
+      { text: t.common.cancelar, style: 'cancel' },
       {
-        text: 'Eliminar',
+        text: t.common.eliminar,
         style: 'destructive',
         onPress: async () => {
           await deleteAppeal(id);
@@ -293,15 +282,15 @@ function AppealFlow() {
   return (
     <Screen>
       <View style={styles.header}>
-        <Text style={styles.heading}>Apelación AI</Text>
+        <Text style={styles.heading}>{t.appeal.title}</Text>
         <View style={styles.headerBtns}>
           {step !== 'history' ? (
             <TouchableOpacity onPress={() => setStep('history')}>
-              <Text style={styles.linkBtn}>📋 Historial</Text>
+              <Text style={styles.linkBtn}>{t.appeal.historyLink}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={resetFlow}>
-              <Text style={styles.linkBtn}>＋ Nueva</Text>
+              <Text style={styles.linkBtn}>{t.appeal.newLink}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -310,7 +299,7 @@ function AppealFlow() {
       {/* ===== Paso 1: plataforma ===== */}
       {step === 'platform' && (
         <View>
-          <Text style={styles.stepTitle}>Paso 1 de 4 · ¿Qué plataforma te desactivó?</Text>
+          <Text style={styles.stepTitle}>{t.appeal.step1}</Text>
           <View style={styles.grid}>
             {PLATFORMS.map((p) => (
               <TouchableOpacity
@@ -336,7 +325,7 @@ function AppealFlow() {
             style={styles.primaryBtn}
             onPress={() => setStep('photo')}
           >
-            <Text style={styles.primaryBtnText}>Continuar</Text>
+            <Text style={styles.primaryBtnText}>{t.common.continuar}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -344,19 +333,18 @@ function AppealFlow() {
       {/* ===== Paso 2: análisis de captura (opcional) ===== */}
       {step === 'photo' && (
         <View>
-          <Text style={styles.stepTitle}>Paso 2 de 4 · Analiza tu desactivación (opcional)</Text>
+          <Text style={styles.stepTitle}>{t.appeal.step2}</Text>
           <Text style={styles.body}>
-            Sube una captura de la notificación que recibiste y te sugeriremos
-            los motivos más probables para pre-rellenar tu apelación.
+            {t.appeal.uploadHint}
           </Text>
           <TouchableOpacity style={styles.secondaryBtn} onPress={pickPhoto}>
-            <Text style={styles.secondaryBtnText}>📸 Analizar mi desactivación</Text>
+            <Text style={styles.secondaryBtnText}>{t.appeal.analyzePhoto}</Text>
           </TouchableOpacity>
           {analyzing && (
             <ActivityIndicator style={styles.loader} color={GREEN} />
           )}
           {photoUri && !analyzing && (
-            <Text style={styles.body}>✅ Captura cargada. Elige los motivos que apliquen:</Text>
+            <Text style={styles.body}>{t.appeal.photoLoaded}</Text>
           )}
           {reasons.length > 0 && !analyzing && (
             <View style={styles.chips}>
@@ -391,7 +379,7 @@ function AppealFlow() {
               style={[styles.secondaryBtn, styles.rowBtn]}
               onPress={() => setStep('platform')}
             >
-              <Text style={styles.secondaryBtnText}>Atrás</Text>
+              <Text style={styles.secondaryBtnText}>{t.common.atras}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.primaryBtn, styles.rowBtn]}
@@ -401,7 +389,7 @@ function AppealFlow() {
               }}
             >
               <Text style={styles.primaryBtnText}>
-                {photoUri ? 'Continuar' : 'Omitir este paso'}
+                {photoUri ? t.common.continuar : t.appeal.skipStep}
               </Text>
             </TouchableOpacity>
           </View>
@@ -412,7 +400,7 @@ function AppealFlow() {
       {step === 'wizard' && currentQ && (
         <View>
           <Text style={styles.stepTitle}>
-            Paso 3 de 4 · Pregunta {qIndex + 1} de {questions.length}
+            {t.appeal.step3(qIndex, questions.length)}
           </Text>
           <Text style={styles.question}>{currentQ.question}</Text>
           <TextInput
@@ -432,14 +420,14 @@ function AppealFlow() {
                 else setStep('photo');
               }}
             >
-              <Text style={styles.secondaryBtnText}>Atrás</Text>
+              <Text style={styles.secondaryBtnText}>{t.common.atras}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.primaryBtn, styles.rowBtn]}
               onPress={nextQuestion}
             >
               <Text style={styles.primaryBtnText}>
-                {qIndex === questions.length - 1 ? 'Generar carta' : 'Continuar'}
+                {qIndex === questions.length - 1 ? t.appeal.generateLetter : t.common.continuar}
               </Text>
             </TouchableOpacity>
           </View>
@@ -449,10 +437,11 @@ function AppealFlow() {
       {/* ===== Paso 4: carta generada ===== */}
       {step === 'letter' && (
         <View>
-          <Text style={styles.stepTitle}>Paso 4 de 4 · Tu carta de apelación</Text>
+          <Text style={styles.stepTitle}>{t.appeal.step4}</Text>
           <Text style={styles.body}>
-            Reemplaza <Text style={styles.bold}>[Tu nombre]</Text> con tus datos
-            antes de enviarla.
+            {t.appeal.replaceNamePre}
+            <Text style={styles.bold}>{t.appeal.yourName}</Text>
+            {t.appeal.replaceNamePost}
           </Text>
           <View style={styles.tabs}>
             <TouchableOpacity
@@ -476,11 +465,11 @@ function AppealFlow() {
             <Text style={styles.letterText}>{letter}</Text>
           </View>
           <TouchableOpacity style={styles.primaryBtn} onPress={copyLetter}>
-            <Text style={styles.primaryBtnText}>📋 Copiar carta</Text>
+            <Text style={styles.primaryBtnText}>{t.appeal.copyLetter}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={openOfficialLink}>
             <Text style={styles.secondaryBtnText}>
-              🔗 Abrir enlace oficial de {platformName}
+              {t.appeal.openLink(platformName)}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -491,11 +480,11 @@ function AppealFlow() {
             {saving ? (
               <ActivityIndicator color={GREEN} />
             ) : (
-              <Text style={styles.secondaryBtnText}>💾 Guardar apelación</Text>
+              <Text style={styles.secondaryBtnText}>{t.appeal.saveAppeal}</Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.ghostBtn} onPress={() => setStep('wizard')}>
-            <Text style={styles.ghostBtnText}>Editar respuestas</Text>
+            <Text style={styles.ghostBtnText}>{t.appeal.editAnswers}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -503,15 +492,12 @@ function AppealFlow() {
       {/* ===== Historial ===== */}
       {step === 'history' && (
         <View>
-          <Text style={styles.stepTitle}>Historial de apelaciones</Text>
+          <Text style={styles.stepTitle}>{t.appeal.history}</Text>
           {history.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.body}>
-                Aún no tienes apelaciones guardadas. Cuando generes tu primera
-                carta, aparecerá aquí.
-              </Text>
+              <Text style={styles.body}>{t.appeal.emptyHistory}</Text>
               <TouchableOpacity style={styles.primaryBtn} onPress={resetFlow}>
-                <Text style={styles.primaryBtnText}>Crear mi primera apelación</Text>
+                <Text style={styles.primaryBtnText}>{t.appeal.createFirst}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -526,9 +512,9 @@ function AppealFlow() {
                   <Text style={styles.historyDate}>{fmtDate(record.createdAt)}</Text>
                 </View>
                 <Text style={styles.historyProblem} numberOfLines={2}>
-                  {record.problem || 'Sin motivo registrado'}
+                  {record.problem || t.appeal.noReason}
                 </Text>
-                <Text style={styles.historyCta}>Ver detalle ›</Text>
+                <Text style={styles.historyCta}>{t.appeal.viewDetail}</Text>
               </TouchableOpacity>
             ))
           )}
@@ -549,11 +535,11 @@ function AppealFlow() {
               </Text>
               {detailAnswers && (
                 <View style={styles.detailBox}>
-                  <DetailRow label="Motivo" value={detailAnswers.motivo} />
-                  <DetailRow label="Fecha" value={detailAnswers.fecha} />
-                  <DetailRow label="Notificación" value={detailAnswers.contexto} />
-                  <DetailRow label="Evidencia" value={detailAnswers.evidencia} />
-                  <DetailRow label="Pedido" value={detailAnswers.pedido} />
+                  <DetailRow label={t.appeal.detailMotivo} value={detailAnswers.motivo} />
+                  <DetailRow label={t.appeal.detailFecha} value={detailAnswers.fecha} />
+                  <DetailRow label={t.appeal.detailNotification} value={detailAnswers.contexto} />
+                  <DetailRow label={t.appeal.detailEvidencia} value={detailAnswers.evidencia} />
+                  <DetailRow label={t.appeal.detailPedido} value={detailAnswers.pedido} />
                 </View>
               )}
               <View style={styles.tabs}>
@@ -583,13 +569,13 @@ function AppealFlow() {
                 style={styles.dangerBtn}
                 onPress={() => handleDelete(detail.id)}
               >
-                <Text style={styles.dangerBtnText}>Eliminar apelación</Text>
+                <Text style={styles.dangerBtnText}>{t.appeal.deleteAppeal}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.secondaryBtn}
                 onPress={() => setDetail(null)}
               >
-                <Text style={styles.secondaryBtnText}>Cerrar</Text>
+                <Text style={styles.secondaryBtnText}>{t.common.cerrar}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -619,7 +605,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   headerBtns: {
     flexDirection: 'row',
@@ -633,12 +619,12 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   body: {
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
     lineHeight: 22,
   },
@@ -648,7 +634,7 @@ const styles = StyleSheet.create({
   question: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
     lineHeight: 24,
   },
@@ -660,7 +646,7 @@ const styles = StyleSheet.create({
   },
   platformBtn: {
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 8,
@@ -671,26 +657,26 @@ const styles = StyleSheet.create({
   },
   platformBtnActive: {
     borderColor: GREEN,
-    backgroundColor: '#EAF7EF',
+    backgroundColor: theme.successBg,
   },
   platformText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   platformTextActive: {
     color: GREEN,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 12,
     fontSize: 16,
     minHeight: 130,
     marginBottom: 16,
-    color: '#0A0A0A',
-    backgroundColor: '#FFFFFF',
+    color: theme.text,
+    backgroundColor: theme.card,
   },
   primaryBtn: {
     backgroundColor: GREEN,
@@ -700,7 +686,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   primaryBtnText: {
-    color: '#FFFFFF',
+    color: theme.text,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -723,13 +709,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   ghostBtnText: {
-    color: '#6B7280',
+    color: theme.textMuted,
     fontSize: 15,
     fontWeight: '600',
   },
   dangerBtn: {
     borderWidth: 1.5,
-    borderColor: '#DC2626',
+    borderColor: theme.danger,
     borderRadius: 12,
     paddingVertical: 13,
     alignItems: 'center',
@@ -737,7 +723,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   dangerBtnText: {
-    color: '#DC2626',
+    color: theme.danger,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -759,7 +745,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -768,25 +754,25 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: GREEN,
-    backgroundColor: '#EAF7EF',
+    backgroundColor: theme.successBg,
   },
   chipText: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
   },
   chipTextActive: {
     color: GREEN,
     fontWeight: '700',
   },
   noticeBox: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.warningBg,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
   noticeText: {
     fontSize: 13,
-    color: '#92400E',
+    color: theme.warning,
     lineHeight: 20,
   },
   tabs: {
@@ -798,7 +784,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
   },
   tabActive: {
     backgroundColor: GREEN,
@@ -807,23 +793,23 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: theme.text,
   },
   letterBox: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 14,
     marginBottom: 16,
     maxHeight: 320,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: theme.card,
   },
   letterText: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
     lineHeight: 22,
   },
   emptyBox: {
@@ -831,11 +817,11 @@ const styles = StyleSheet.create({
   },
   historyItem: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
   },
   historyRow: {
     flexDirection: 'row',
@@ -845,15 +831,15 @@ const styles = StyleSheet.create({
   historyPlatform: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   historyDate: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   historyProblem: {
     fontSize: 14,
-    color: '#374151',
+    color: theme.textBody,
     marginBottom: 6,
   },
   historyCta: {
@@ -862,7 +848,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   detailBox: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
@@ -873,7 +859,7 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#6B7280',
+    color: theme.textMuted,
     textTransform: 'uppercase',
     marginBottom: 2,
   },

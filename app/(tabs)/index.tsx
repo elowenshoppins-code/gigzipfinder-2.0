@@ -21,6 +21,8 @@ import { getDb, getSetting, type EarningEntry } from '../../src/db/database';
 import { useToolkitAccess } from '../../src/services/monetization';
 import { wipeDemoData } from '../../src/seed';
 import { fmtMoney, fmtMiles, todayISO } from '../../src/utils/format';
+import { useStrings } from '../../src/i18n';
+import { theme } from '../../src/theme';
 
 type NavCard = {
   emoji: string;
@@ -30,21 +32,6 @@ type NavCard = {
   /** true = parte del toolkit ($10/mes); muestra 🔒 sin suscripción. */
   toolkit: boolean;
 };
-
-const CARDS: NavCard[] = [
-  { emoji: '📍', title: 'ZIP Finder', desc: 'Códigos ZIP con alta disponibilidad por IA', route: '/zip', toolkit: false },
-  { emoji: '🚗', title: 'Millas', desc: 'Registra y sigue tus millas de trabajo', route: '/(tabs)/miles', toolkit: true },
-  { emoji: '💵', title: 'Ganancias', desc: 'Tus ingresos por app y por día', route: '/(tabs)/earnings', toolkit: true },
-  { emoji: '📱', title: 'Multi-App', desc: 'Compara tus apps de gig', route: '/multiapp', toolkit: true },
-  { emoji: '⛽', title: 'Gasolina', desc: 'Controla tu gasto de combustible', route: '/gas', toolkit: true },
-  { emoji: '🧾', title: 'Tax Center', desc: 'Deducciones e impuestos estimados', route: '/taxes', toolkit: true },
-  { emoji: '🛡️', title: 'Apelación', desc: 'Appeal AI contra desactivaciones', route: '/(tabs)/appeal', toolkit: true },
-  { emoji: '⭐', title: 'Driver Score', desc: 'Tu puntaje como conductor', route: '/score', toolkit: true },
-  { emoji: '🔥', title: 'Hot Zones', desc: 'Zonas calientes cerca de ti', route: '/hotzones', toolkit: true },
-  { emoji: '🗂️', title: 'Document Vault', desc: 'Tus documentos importantes', route: '/vault', toolkit: true },
-  { emoji: '🤖', title: 'Gig AI', desc: 'Asistente con tus datos locales', route: '/(tabs)/gigai', toolkit: true },
-  { emoji: '⚙️', title: 'Ajustes', desc: 'Configuración de la app', route: '/settings', toolkit: false },
-];
 
 interface TodaySummary {
   earned: number;
@@ -58,11 +45,27 @@ function fmtHours(h: number): string {
 }
 
 export default function HomeScreen() {
+  const t = useStrings();
   const [toolkitAccess] = useToolkitAccess();
   const [summary, setSummary] = useState<TodaySummary | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [wiping, setWiping] = useState(false);
+
+  const CARDS: NavCard[] = [
+    { emoji: '📍', title: 'ZIP Finder', desc: t.home.zipDesc, route: '/zip', toolkit: false },
+    { emoji: '🚗', title: t.home.milesTitle, desc: t.home.milesDesc, route: '/(tabs)/miles', toolkit: true },
+    { emoji: '💵', title: t.home.earnTitle, desc: t.home.earnDesc, route: '/(tabs)/earnings', toolkit: true },
+    { emoji: '📱', title: t.home.multiTitle, desc: t.home.multiDesc, route: '/multiapp', toolkit: true },
+    { emoji: '⛽', title: t.home.gasTitle, desc: t.home.gasDesc, route: '/gas', toolkit: true },
+    { emoji: '🧾', title: t.home.taxTitle, desc: t.home.taxDesc, route: '/taxes', toolkit: true },
+    { emoji: '🛡️', title: t.home.appealTitle, desc: t.home.appealDesc, route: '/(tabs)/appeal', toolkit: true },
+    { emoji: '⭐', title: t.home.scoreTitle, desc: t.home.scoreDesc, route: '/score', toolkit: true },
+    { emoji: '🔥', title: t.home.hotTitle, desc: t.home.hotDesc, route: '/hotzones', toolkit: true },
+    { emoji: '🗂️', title: t.home.vaultTitle, desc: t.home.vaultDesc, route: '/vault', toolkit: true },
+    { emoji: '🤖', title: t.home.aiTitle, desc: t.home.aiDesc, route: '/(tabs)/gigai', toolkit: true },
+    { emoji: '⚙️', title: t.home.settingsTitle, desc: t.home.settingsDesc, route: '/settings', toolkit: false },
+  ];
 
   const load = useCallback(() => {
     setLoading(true);
@@ -133,41 +136,41 @@ export default function HomeScreen() {
   return (
     <Screen>
       <Text style={styles.title}>Gig ZipFinder</Text>
-      <Text style={styles.subtitle}>Tu resumen de hoy</Text>
+      <Text style={styles.subtitle}>{t.home.subtitle}</Text>
 
       {loading ? (
-        <ActivityIndicator style={styles.loader} color="#00A651" />
+        <ActivityIndicator style={styles.loader} color={theme.primary} />
       ) : (
         <View>
           <View style={styles.statsRow}>
-            <StatCard label="Ganado hoy" value={fmtMoney(summary?.earned ?? 0)} />
-            <StatCard label="Horas" value={fmtHours(summary?.hours ?? 0)} />
+            <StatCard label={t.home.earnedToday} value={fmtMoney(summary?.earned ?? 0)} />
+            <StatCard label={t.home.hours} value={fmtHours(summary?.hours ?? 0)} />
           </View>
           <View style={styles.statsRow}>
-            <StatCard label="Millas" value={fmtMiles(summary?.miles ?? 0)} />
-            <StatCard label="$/hora" value={`${fmtMoney(perHour)}/h`} />
+            <StatCard label={t.home.miles} value={fmtMiles(summary?.miles ?? 0)} />
+            <StatCard label={t.home.perHourLabel} value={`${fmtMoney(perHour)}${t.home.perHourSuffix}`} />
           </View>
         </View>
       )}
 
       {isDemo ? (
         <View style={styles.demoBanner}>
-          <Text style={styles.demoText}>Estás viendo datos de ejemplo</Text>
+          <Text style={styles.demoText}>{t.home.demoBanner}</Text>
           <Pressable
             style={({ pressed }) => [styles.demoButton, pressed && styles.pressed]}
             onPress={handleWipe}
             disabled={wiping}
           >
             {wiping ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color={theme.onPrimary} size="small" />
             ) : (
-              <Text style={styles.demoButtonText}>Borrar datos demo</Text>
+              <Text style={styles.demoButtonText}>{t.home.wipeDemo}</Text>
             )}
           </Pressable>
         </View>
       ) : null}
 
-      <Text style={styles.sectionTitle}>Módulos</Text>
+      <Text style={styles.sectionTitle}>{t.home.modules}</Text>
       <View style={styles.grid}>
         {CARDS.map((card) => {
           const locked = card.toolkit && !toolkitAccess;
@@ -195,11 +198,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   subtitle: {
     fontSize: 15,
-    color: '#6B7280',
+    color: theme.textMuted,
     marginBottom: 12,
     marginTop: 2,
   },
@@ -212,8 +215,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   demoBanner: {
-    backgroundColor: '#FFF7E6',
-    borderColor: '#F5B301',
+    backgroundColor: theme.warningBg,
+    borderColor: theme.warning,
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
@@ -225,19 +228,19 @@ const styles = StyleSheet.create({
   },
   demoText: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
     fontWeight: '600',
     flexShrink: 1,
     marginRight: 8,
   },
   demoButton: {
-    backgroundColor: '#B42318',
-    borderRadius: 8,
+    backgroundColor: theme.danger,
+    borderRadius: theme.radiusPill,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   demoButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -247,7 +250,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginTop: 14,
     marginBottom: 10,
   },
@@ -257,11 +260,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   card: {
-    backgroundColor: '#F6F7F6',
-    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderRadius: theme.radiusCard,
     padding: 14,
     width: '48%',
     flexGrow: 1,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
   cardEmoji: {
     fontSize: 26,
@@ -270,11 +275,11 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 2,
   },
   cardDesc: {
     fontSize: 12,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
 });

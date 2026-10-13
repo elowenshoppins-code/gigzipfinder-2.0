@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { SafeAreaView, ScrollView, View, StyleSheet } from 'react-native';
+import { theme } from '../theme';
 
 type ScreenProps = {
   children: ReactNode;
@@ -19,7 +20,7 @@ export function Screen({ children, scroll = true }: ScreenProps) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
   },
   content: {
     flex: 1,

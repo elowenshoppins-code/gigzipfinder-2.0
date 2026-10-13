@@ -18,12 +18,13 @@ import { Paywall } from '../src/components/Paywall';
 import { getDb } from '../src/db/database';
 import type { Trip } from '../src/db/database';
 import { fmtMoney, fmtMiles, monthKey } from '../src/utils/format';
-import { deductionForPeriod, DEDUCTION_DISCLAIMER } from '../src/utils/irs';
+import { deductionForPeriod } from '../src/utils/irs';
 import {
   useToolkitAccess,
   subscribeToolkit,
   restorePurchases,
 } from '../src/services/monetization';
+import { useStrings } from '../src/i18n';
 import {
   exportCSV,
   exportTaxPDF,
@@ -32,6 +33,7 @@ import {
   monthLabelES,
   shiftMonth,
 } from '../src/services/export';
+import { theme } from '../src/theme';
 
 interface MonthSummary {
   gross: number;
@@ -48,6 +50,7 @@ const num = (v: number | null | undefined): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : 0;
 
 export default function TaxesScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   return (
@@ -57,13 +60,8 @@ export default function TaxesScreen() {
       ) : (
         <Paywall
           title="Tax Center"
-          priceText="$10/mes"
-          features={[
-            'Resumen mensual de ingresos y gastos',
-            'Millas comerciales y millaje estimado (tarifa IRS)',
-            'Exporta tu reporte en PDF y CSV',
-            'Lleva tus registros listos para la temporada de impuestos',
-          ]}
+          priceText={t.common.perMonth}
+          features={t.taxes.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -79,6 +77,7 @@ export default function TaxesScreen() {
 }
 
 function TaxesContent() {
+  const t = useStrings();
   const [month, setMonth] = useState(monthKey());
   const [summary, setSummary] = useState<MonthSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,7 +144,7 @@ function TaxesContent() {
 
   return (
     <View>
-      <Text style={styles.title}>🧾 Tax Center</Text>
+      <Text style={styles.title}>{t.taxes.title}</Text>
 
       {/* Selector de mes */}
       <View style={styles.dateNav}>
@@ -163,52 +162,50 @@ function TaxesContent() {
       ) : !summary || summary.entryCount === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>
-            📋 Sin registros en {monthLabelES(month)}.{'\n'}Registra tus ganancias y
-            tus viajes de trabajo para generar tu reporte.
+            {t.taxes.emptyMonth(monthLabelES(month))}
           </Text>
         </View>
       ) : (
         <>
           <View style={styles.statsGrid}>
             <StatCard
-              label="Ingresos totales"
+              label={t.taxes.statGross}
               value={fmtMoney(summary.gross)}
-              sub={`${summary.entryCount} registro(s)`}
+              sub={t.taxes.recordsCount(summary.entryCount)}
             />
             <StatCard
-              label="Millas comerciales"
+              label={t.taxes.commercialMiles}
               value={fmtMiles(summary.businessMiles)}
-              sub="Viajes de trabajo"
+              sub={t.taxes.workTrips}
             />
             <StatCard
-              label="Millaje estimado"
+              label={t.taxes.statDeduction}
               value={fmtMoney(summary.deduction)}
               sub={summary.deductionBreakdown}
             />
-            <StatCard label="Peajes" value={fmtMoney(summary.tolls)} />
-            <StatCard label="Estacionamiento" value={fmtMoney(summary.parking)} />
-            <StatCard label="Propinas" value={fmtMoney(summary.tips)} />
+            <StatCard label={t.taxes.statTolls} value={fmtMoney(summary.tolls)} />
+            <StatCard label={t.taxes.statParking} value={fmtMoney(summary.parking)} />
+            <StatCard label={t.taxes.statTips} value={fmtMoney(summary.tips)} />
           </View>
 
           <View style={styles.disclaimer}>
-            <Text style={styles.disclaimerText}>⚠️ {DEDUCTION_DISCLAIMER}</Text>
+            <Text style={styles.disclaimerText}>⚠️ {t.irs.disclaimer}</Text>
             <Text style={styles.disclaimerText}>
-              El millaje estimado se calcula con la tarifa estándar del IRS sobre
-              tus millas comerciales registradas.
+              {t.taxes.disclaimerP2}
             </Text>
           </View>
         </>
       )}
 
       {/* Exportar */}
-      <Text style={styles.sectionTitle}>Exportar reporte</Text>
+      <Text style={styles.sectionTitle}>{t.taxes.exportReport}</Text>
       <TouchableOpacity
         style={[styles.exportButton, exporting && styles.disabled]}
         onPress={handleExportPDF}
         disabled={exporting}
       >
         <Text style={styles.exportButtonText}>
-          {exporting ? 'Generando…' : '📄 Exportar PDF'}
+          {exporting ? t.taxes.generating : `📄 ${t.taxes.exportPdf}`}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -221,15 +218,12 @@ function TaxesContent() {
         disabled={exporting}
       >
         <Text style={[styles.exportButtonText, styles.exportButtonTextSecondary]}>
-          {exporting ? 'Generando…' : '📊 Exportar CSV'}
+          {exporting ? t.taxes.generating : `📊 ${t.taxes.exportCsv}`}
         </Text>
       </TouchableOpacity>
 
       <View style={styles.note}>
-        <Text style={styles.noteText}>
-          Guarda este reporte para tus registros. Estimación, no asesoría
-          fiscal.
-        </Text>
+        <Text style={styles.noteText}>{t.taxes.reportNote}</Text>
       </View>
     </View>
   );
@@ -239,7 +233,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   dateNav: {
@@ -249,8 +243,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   navButton: {
-    backgroundColor: '#F6F7F6',
-    borderRadius: 10,
+    backgroundColor: theme.card,
+    borderRadius: theme.radiusPill,
     width: 40,
     height: 40,
     alignItems: 'center',
@@ -260,12 +254,12 @@ const styles = StyleSheet.create({
   navButtonText: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#00A651',
+    color: theme.primary,
   },
   dateText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     minWidth: 140,
     textAlign: 'center',
     textTransform: 'capitalize',
@@ -273,7 +267,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
     marginTop: 10,
   },
@@ -287,7 +281,7 @@ const styles = StyleSheet.create({
     marginVertical: 20,
   },
   empty: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -295,43 +289,43 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
     textAlign: 'center',
     lineHeight: 20,
   },
   disclaimer: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.warningBg,
     borderWidth: 1,
-    borderColor: '#F5D547',
+    borderColor: theme.warning,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
   },
   disclaimerText: {
     fontSize: 13,
-    color: '#92690E',
+    color: theme.warning,
     lineHeight: 18,
     marginBottom: 4,
   },
   exportButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 12,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 10,
   },
   exportButtonSecondary: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     borderWidth: 1,
-    borderColor: '#00A651',
+    borderColor: theme.primary,
   },
   exportButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
   exportButtonTextSecondary: {
-    color: '#00A651',
+    color: theme.primary,
   },
   disabled: {
     opacity: 0.6,
@@ -339,12 +333,12 @@ const styles = StyleSheet.create({
   note: {
     marginTop: 12,
     padding: 14,
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
   },
   noteText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
     textAlign: 'center',
     lineHeight: 18,
   },

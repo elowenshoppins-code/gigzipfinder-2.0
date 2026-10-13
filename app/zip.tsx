@@ -31,6 +31,8 @@ import {
   ZIP_PRICE,
 } from '../src/services/monetization';
 import { uid } from '../src/utils/format';
+import { useStrings } from '../src/i18n';
+import { theme } from '../src/theme';
 
 const APPS = [
   { key: 'instacart', label: 'Instacart' },
@@ -41,6 +43,7 @@ const APPS = [
 const SITE_URL = 'https://www.gigzipfinder.com';
 
 export default function ZipFinderScreen() {
+  const t = useStrings();
   const [app, setApp] = useState<string>(APPS[0].key);
   const [zipAccess, refreshZip] = useZipAccess(app);
   const [zips, setZips] = useState<ZipCode[]>([]);
@@ -73,14 +76,14 @@ export default function ZipFinderScreen() {
     try {
       await purchaseZip(app); // MOCK — Integración real: TODO RevenueCat
       refreshZip();
-      setStatus('¡Desbloqueado! (compra simulada)');
+      setStatus(t.zip.unlocked);
     } catch (err) {
       console.warn('[zip] purchaseZip falló:', err);
-      setStatus('No se pudo completar la compra. Inténtalo de nuevo.');
+      setStatus(t.zip.purchaseError);
     } finally {
       setBuying(false);
     }
-  }, [app, refreshZip]);
+  }, [app, refreshZip, t]);
 
   const handleRestore = useCallback(async () => {
     setRestoring(true);
@@ -88,19 +91,19 @@ export default function ZipFinderScreen() {
     try {
       await restorePurchases();
       refreshZip();
-      setStatus('Compras restauradas.');
+      setStatus(t.zip.restored);
     } catch (err) {
       console.warn('[zip] restorePurchases falló:', err);
-      setStatus('No se pudo restaurar. Inténtalo de nuevo.');
+      setStatus(t.zip.restoreError);
     } finally {
       setRestoring(false);
     }
-  }, [refreshZip]);
+  }, [refreshZip, t]);
 
   const handleAdd = useCallback(() => {
     const clean = code.trim();
     if (!clean) {
-      setStatus('Escribe un código ZIP para agregarlo.');
+      setStatus(t.zip.emptyZip);
       return;
     }
     try {
@@ -114,9 +117,9 @@ export default function ZipFinderScreen() {
       loadZips();
     } catch (err) {
       console.warn('[zip] agregar falló:', err);
-      setStatus('No se pudo guardar el ZIP.');
+      setStatus(t.zip.saveZipError);
     }
-  }, [code, notes, app, loadZips]);
+  }, [code, notes, app, loadZips, t]);
 
   const handleDelete = useCallback(
     (id: string) => {
@@ -139,13 +142,9 @@ export default function ZipFinderScreen() {
   const header = (
     <View>
       <Text style={styles.title}>ZIP Finder</Text>
-      <Text style={styles.explainer}>
-        Códigos ZIP con alta disponibilidad sugeridos por IA para Instacart,
-        DoorDash y Spark Driver. Escaneo cada 48h. {'$'}{ZIP_PRICE} pago único
-        por app, sin suscripción.
-      </Text>
+      <Text style={styles.explainer}>{t.zip.explainer(`$${ZIP_PRICE}`)}</Text>
 
-      <Text style={styles.sectionLabel}>App de gig</Text>
+      <Text style={styles.sectionLabel}>{t.zip.appLabel}</Text>
       <View style={styles.appRow}>
         {APPS.map((a) => (
           <Pressable
@@ -173,31 +172,29 @@ export default function ZipFinderScreen() {
 
       {!zipAccess ? (
         <View style={styles.paywallBox}>
-          <Text style={styles.price}>{'$'}{ZIP_PRICE} pago único</Text>
-          <Text style={styles.paywallNote}>
-            Desbloquea los ZIPs de {appLabel} para siempre. Sin suscripción.
-          </Text>
+          <Text style={styles.price}>{t.zip.oneTime(`$${ZIP_PRICE}`)}</Text>
+          <Text style={styles.paywallNote}>{t.zip.unlockNote(appLabel)}</Text>
           <Pressable
             style={({ pressed }) => [styles.buyButton, pressed && styles.pressed]}
             onPress={handleBuy}
             disabled={buying}
           >
             {buying ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={theme.onPrimary} />
             ) : (
-              <Text style={styles.buyButtonText}>Desbloquear</Text>
+              <Text style={styles.buyButtonText}>{t.zip.unlock}</Text>
             )}
           </Pressable>
-          <Text style={styles.todoNote}>Integración real: TODO RevenueCat</Text>
+          <Text style={styles.todoNote}>{t.zip.todoNote}</Text>
           {status ? <Text style={styles.status}>{status}</Text> : null}
         </View>
       ) : (
         <View>
-          <Text style={styles.sectionTitle}>Mis ZIPs — {appLabel}</Text>
+          <Text style={styles.sectionTitle}>{t.zip.myZipsFor(appLabel)}</Text>
           <View style={styles.addRow}>
             <TextInput
               style={[styles.input, styles.codeInput]}
-              placeholder="ZIP (ej. 32801)"
+              placeholder={t.zip.zipPh}
               value={code}
               onChangeText={setCode}
               keyboardType="number-pad"
@@ -205,7 +202,7 @@ export default function ZipFinderScreen() {
             />
             <TextInput
               style={[styles.input, styles.noteInput]}
-              placeholder="Nota (opcional)"
+              placeholder={t.zip.notePh}
               value={notes}
               onChangeText={setNotes}
             />
@@ -214,7 +211,7 @@ export default function ZipFinderScreen() {
             style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
             onPress={handleAdd}
           >
-            <Text style={styles.addButtonText}>Agregar ZIP</Text>
+            <Text style={styles.addButtonText}>{t.zip.addZip}</Text>
           </Pressable>
           {status ? <Text style={styles.status}>{status}</Text> : null}
         </View>
@@ -233,9 +230,9 @@ export default function ZipFinderScreen() {
         disabled={restoring}
       >
         {restoring ? (
-          <ActivityIndicator color="#00A651" size="small" />
+          <ActivityIndicator color={theme.primary} size="small" />
         ) : (
-          <Text style={styles.restoreText}>Restaurar compras</Text>
+          <Text style={styles.restoreText}>{t.paywall.restore}</Text>
         )}
       </Pressable>
     </View>
@@ -263,14 +260,14 @@ export default function ZipFinderScreen() {
               ]}
               onPress={() => handleDelete(item.id)}
             >
-              <Text style={styles.deleteText}>Eliminar</Text>
+              <Text style={styles.deleteText}>{t.common.eliminar}</Text>
             </Pressable>
           </View>
         )}
         ListEmptyComponent={
           zipAccess ? (
             <Text style={styles.empty}>
-              Aún no guardas ZIPs para {appLabel}. Agrega el primero arriba.
+              {t.zip.emptyZips(appLabel)}
             </Text>
           ) : null
         }
@@ -286,19 +283,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 8,
   },
   explainer: {
     fontSize: 14,
-    color: '#4B5563',
+    color: theme.textBody,
     lineHeight: 20,
     marginBottom: 16,
   },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: theme.textMuted,
     marginBottom: 8,
     textTransform: 'uppercase',
   },
@@ -310,25 +307,25 @@ const styles = StyleSheet.create({
   appChip: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
   },
   appChipActive: {
-    backgroundColor: '#00A651',
-    borderColor: '#00A651',
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
   },
   appChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: theme.textBody,
   },
   appChipTextActive: {
-    color: '#FFFFFF',
+    color: theme.text,
   },
   paywallBox: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -337,36 +334,36 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#00A651',
+    color: theme.primary,
     marginBottom: 4,
   },
   paywallNote: {
     fontSize: 14,
-    color: '#4B5563',
+    color: theme.textBody,
     textAlign: 'center',
     marginBottom: 12,
   },
   buyButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 12,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 14,
     paddingHorizontal: 32,
     alignSelf: 'stretch',
     alignItems: 'center',
   },
   buyButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },
   todoNote: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: theme.textMuted,
     marginTop: 8,
   },
   status: {
     fontSize: 13,
-    color: '#00A651',
+    color: theme.success,
     fontWeight: '600',
     marginTop: 8,
     textAlign: 'center',
@@ -377,7 +374,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
   },
   addRow: {
@@ -387,12 +384,12 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
     fontSize: 15,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
   },
   codeInput: {
     flex: 1,
@@ -401,14 +398,14 @@ const styles = StyleSheet.create({
     flex: 2,
   },
   addButton: {
-    backgroundColor: '#0A0A0A',
-    borderRadius: 10,
+    backgroundColor: theme.text,
+    borderRadius: theme.radiusPill,
     paddingVertical: 12,
     alignItems: 'center',
     marginBottom: 4,
   },
   addButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontWeight: '700',
     fontSize: 15,
   },
@@ -416,7 +413,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 14,
     marginTop: 8,
@@ -428,11 +425,11 @@ const styles = StyleSheet.create({
   zipCode: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   zipNotes: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
     marginTop: 2,
   },
   deleteButton: {
@@ -440,26 +437,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   deleteText: {
-    color: '#B42318',
+    color: theme.danger,
     fontWeight: '600',
     fontSize: 14,
   },
   empty: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: theme.textMuted,
     textAlign: 'center',
     marginTop: 16,
   },
   siteButton: {
     borderWidth: 1,
-    borderColor: '#00A651',
-    borderRadius: 12,
+    borderColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 16,
   },
   siteButtonText: {
-    color: '#00A651',
+    color: theme.primary,
     fontWeight: '700',
     fontSize: 15,
   },
@@ -468,7 +465,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   restoreText: {
-    color: '#00A651',
+    color: theme.primary,
     fontSize: 15,
     fontWeight: '600',
   },

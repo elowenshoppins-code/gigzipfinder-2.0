@@ -16,39 +16,31 @@ import * as Print from 'expo-print';
 import { getDb } from '../db/database';
 import type { EarningEntry, Trip } from '../db/database';
 import { fmtMoney, fmtMiles } from '../utils/format';
-import { deductionForPeriod, DEDUCTION_DISCLAIMER } from '../utils/irs';
+import { deductionForPeriod } from '../utils/irs';
+import { getStrings, getLanguage } from '../i18n';
+import { theme } from '../theme';
 
 /* ------------------------------------------------------------------ */
 /* Utilidades de mes                                                   */
 /* ------------------------------------------------------------------ */
 
-const MONTHS_ES = [
-  'enero',
-  'febrero',
-  'marzo',
-  'abril',
-  'mayo',
-  'junio',
-  'julio',
-  'agosto',
-  'septiembre',
-  'octubre',
-  'noviembre',
-  'diciembre',
-];
-
-/** 'octubre 2026' para un mes 'YYYY-MM'. */
+/**
+ * 'octubre 2026' para un mes 'YYYY-MM', en el idioma actual.
+ * Se conserva el nombre histórico `monthLabelES` por compatibilidad con
+ * sus importadores (ahora devuelve el mes en el idioma activo).
+ */
 export function monthLabelES(month: string): string {
   const [y, m] = month.split('-').map(Number);
   if (!y || !m || m < 1 || m > 12) return month;
-  return `${MONTHS_ES[m - 1]} ${y}`;
+  const names = getStrings().exportSvc.monthNames;
+  return `${names[m - 1]} ${y}`;
 }
 
 /** Rango de fechas [start, end) en 'YYYY-MM-DD' para la tabla earnings. */
 export function monthRange(month: string): { start: string; end: string } {
   const [y, m] = month.split('-').map(Number);
   if (!y || !m || m < 1 || m > 12) {
-    throw new Error(`Mes inválido: ${month}`);
+    throw new Error(getStrings().exportSvc.invalidMonth(month));
   }
   const start = `${y}-${String(m).padStart(2, '0')}-01`;
   const end =
@@ -65,7 +57,7 @@ export function monthEpochRange(month: string): {
 } {
   const [y, m] = month.split('-').map(Number);
   if (!y || !m || m < 1 || m > 12) {
-    throw new Error(`Mes inválido: ${month}`);
+    throw new Error(getStrings().exportSvc.invalidMonth(month));
   }
   const startMs = new Date(y, m - 1, 1, 0, 0, 0, 0).getTime();
   const endMs =
@@ -222,18 +214,19 @@ export async function buildTaxReportCSV(month: string): Promise<string> {
   }
 
   lines.push('');
-  lines.push(csvEsc(`RESUMEN DEL MES — ${monthLabelES(d.month)}`));
-  lines.push(['Ingresos totales (ganancias + propinas)', moneyCsv(d.gross)].join(','));
-  lines.push(['Propinas totales', moneyCsv(d.tips)].join(','));
-  lines.push(['Millas registradas en turnos', milesCsv(d.miles)].join(','));
-  lines.push(['Horas trabajadas', milesCsv(d.hours)].join(','));
-  lines.push(['Millas comerciales (viajes de trabajo)', milesCsv(d.businessMiles)].join(','));
-  lines.push(['Deducción estimada por millaje (tarifa IRS)', moneyCsv(d.deduction)].join(','));
-  lines.push(['Detalle de la deducción', csvEsc(d.deductionBreakdown)].join(','));
-  lines.push(['Gasolina total', moneyCsv(d.gas)].join(','));
-  lines.push(['Peajes totales', moneyCsv(d.tolls)].join(','));
-  lines.push(['Estacionamiento total', moneyCsv(d.parking)].join(','));
-  lines.push(['Nota', csvEsc('Guarda este reporte para tus registros. Estimación, no asesoría fiscal.')].join(','));
+  const t = getStrings().exportSvc;
+  lines.push(csvEsc(t.reportTitle(monthLabelES(d.month))));
+  lines.push([t.csvGross, moneyCsv(d.gross)].join(','));
+  lines.push([t.csvTips, moneyCsv(d.tips)].join(','));
+  lines.push([t.shiftMiles, milesCsv(d.miles)].join(','));
+  lines.push([t.csvHours, milesCsv(d.hours)].join(','));
+  lines.push([t.commercialMiles, milesCsv(d.businessMiles)].join(','));
+  lines.push([t.mileageDeduction, moneyCsv(d.deduction)].join(','));
+  lines.push([t.deductionDetail, csvEsc(d.deductionBreakdown)].join(','));
+  lines.push([t.csvGas, moneyCsv(d.gas)].join(','));
+  lines.push([t.csvTolls, moneyCsv(d.tolls)].join(','));
+  lines.push([t.csvParking, moneyCsv(d.parking)].join(','));
+  lines.push([t.csvNote, csvEsc(t.saveNote)].join(','));
 
   return lines.join('\n') + '\n';
 }
@@ -247,7 +240,7 @@ export async function exportCSV(month: string): Promise<void> {
     const csv = await buildTaxReportCSV(month);
     const base = FileSystem.documentDirectory;
     if (!base) {
-      throw new Error('Sin directorio de documentos');
+      throw new Error(getStrings().exportSvc.noDocDir);
     }
     const uri = `${base}gig-tax-${month}.csv`;
     await FileSystem.writeAsStringAsync(uri, csv, {
@@ -255,19 +248,19 @@ export async function exportCSV(month: string): Promise<void> {
     });
     if (!(await Sharing.isAvailableAsync())) {
       Alert.alert(
-        'Archivo guardado',
-        'El CSV se guardó, pero este dispositivo no puede compartirlo.',
+        getStrings().exportSvc.fileSaved,
+        getStrings().exportSvc.csvNoShare,
       );
       return;
     }
     await Sharing.shareAsync(uri, {
       mimeType: 'text/csv',
-      dialogTitle: 'Compartir reporte CSV',
+      dialogTitle: getStrings().exportSvc.shareCsv,
     });
   } catch {
     Alert.alert(
-      'No se pudo exportar',
-      'Ocurrió un error al generar el archivo CSV. Inténtalo de nuevo.',
+      getStrings().exportSvc.exportFailed,
+      getStrings().exportSvc.csvError,
     );
   }
 }
@@ -285,8 +278,11 @@ function htmlEsc(s: string | null): string {
 }
 
 function buildTaxReportHTML(d: MonthReportData): string {
+  const t = getStrings().exportSvc;
+  const disclaimer = getStrings().irs.disclaimer;
   const label = monthLabelES(d.month);
-  const generated = new Date().toLocaleString('es-US');
+  const locale = getLanguage() === 'pt' ? 'pt-BR' : 'en-US';
+  const generated = new Date().toLocaleString(locale);
 
   const platformRows = d.byPlatform
     .map(
@@ -320,57 +316,55 @@ function buildTaxReportHTML(d: MonthReportData): string {
 <head>
 <meta charset="utf-8" />
 <style>
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #111; margin: 32px; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: ${theme.text}; background: ${theme.bg}; margin: 32px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
-  .subtitle { color: #555; margin-bottom: 20px; }
+  .subtitle { color: ${theme.textMuted}; margin-bottom: 20px; }
   .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
-  .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px 16px; min-width: 150px; flex: 1; }
-  .card .label { font-size: 12px; color: #666; margin-bottom: 4px; }
+  .card { border: 1px solid ${theme.border}; border-radius: 10px; padding: 12px 16px; min-width: 150px; flex: 1; }
+  .card .label { font-size: 12px; color: ${theme.textMuted}; margin-bottom: 4px; }
   .card .value { font-size: 20px; font-weight: bold; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
-  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-  th { background: #f3f4f3; }
+  th, td { border: 1px solid ${theme.border}; padding: 8px; text-align: left; }
+  th { background: ${theme.card}; }
   .num { text-align: right; }
   h2 { font-size: 16px; margin: 24px 0 8px; }
-  .disclaimer { border: 2px solid #b45309; background: #fef3c7; border-radius: 10px; padding: 12px 16px; margin: 20px 0; font-size: 13px; }
-  .footer { color: #666; font-size: 12px; margin-top: 24px; }
+  .disclaimer { border: 2px solid ${theme.warning}; background: ${theme.warningBg}; border-radius: 10px; padding: 12px 16px; margin: 20px 0; font-size: 13px; }
+  .footer { color: ${theme.textMuted}; font-size: 12px; margin-top: 24px; }
 </style>
 </head>
 <body>
-  <h1>Reporte mensual — Gig ZipFinder</h1>
-  <div class="subtitle">${htmlEsc(label)} · Generado el ${htmlEsc(generated)}</div>
+  <h1>${htmlEsc(t.htmlTitle)}</h1>
+  <div class="subtitle">${htmlEsc(label)} · ${htmlEsc(t.generatedOn(generated))}</div>
 
   <div class="cards">
-    <div class="card"><div class="label">Ingresos totales</div><div class="value">${fmtMoney(d.gross)}</div></div>
-    <div class="card"><div class="label">Millas comerciales</div><div class="value">${fmtMiles(d.businessMiles)}</div></div>
-    <div class="card"><div class="label">Millaje estimado (IRS)</div><div class="value">${fmtMoney(d.deduction)}</div></div>
-    <div class="card"><div class="label">Peajes</div><div class="value">${fmtMoney(d.tolls)}</div></div>
-    <div class="card"><div class="label">Estacionamiento</div><div class="value">${fmtMoney(d.parking)}</div></div>
+    <div class="card"><div class="label">${htmlEsc(t.cardGross)}</div><div class="value">${fmtMoney(d.gross)}</div></div>
+    <div class="card"><div class="label">${htmlEsc(t.commercialMiles)}</div><div class="value">${fmtMiles(d.businessMiles)}</div></div>
+    <div class="card"><div class="label">${htmlEsc(t.cardDeduction)}</div><div class="value">${fmtMoney(d.deduction)}</div></div>
+    <div class="card"><div class="label">${htmlEsc(t.cardTolls)}</div><div class="value">${fmtMoney(d.tolls)}</div></div>
+    <div class="card"><div class="label">${htmlEsc(t.cardParking)}</div><div class="value">${fmtMoney(d.parking)}</div></div>
   </div>
 
-  <h2>Detalle de la deducción por millaje</h2>
+  <h2>${htmlEsc(t.detailTitle)}</h2>
   <p>${htmlEsc(d.deductionBreakdown)}</p>
 
   <div class="disclaimer">
-    <strong>⚠️ ${htmlEsc(DEDUCTION_DISCLAIMER)}</strong><br />
-    Este reporte es una estimación generada automáticamente con tus registros.
-    Guarda este reporte para tus registros. Estimación, no asesoría fiscal:
-    consulta a un profesional de impuestos antes de declarar.
+    <strong>⚠️ ${htmlEsc(disclaimer)}</strong><br />
+    ${htmlEsc(t.autoNote)}
   </div>
 
-  <h2>Resumen por plataforma</h2>
+  <h2>${htmlEsc(t.platformSummary)}</h2>
   <table>
-    <tr><th>Plataforma</th><th class="num">Ganado</th><th class="num">Millas</th><th class="num">Horas</th><th class="num">Gasolina</th><th class="num">Peajes + Estac.</th></tr>
-    ${platformRows || '<tr><td colspan="6">Sin registros este mes.</td></tr>'}
+    <tr><th>${htmlEsc(t.colPlatform)}</th><th class="num">${htmlEsc(t.colEarned)}</th><th class="num">${htmlEsc(t.milesCol)}</th><th class="num">${htmlEsc(t.hoursCol)}</th><th class="num">${htmlEsc(t.colGas)}</th><th class="num">${htmlEsc(t.colTollsPark)}</th></tr>
+    ${platformRows || '<tr><td colspan="6">${htmlEsc(t.noRecords)}</td></tr>'}
   </table>
 
-  <h2>Registros del mes</h2>
+  <h2>${htmlEsc(t.monthRecords)}</h2>
   <table>
-    <tr><th>Fecha</th><th>Plataforma</th><th class="num">Ganado</th><th class="num">Millas</th><th class="num">Horas</th></tr>
-    ${detailRows || '<tr><td colspan="5">Sin registros este mes.</td></tr>'}
+    <tr><th>${htmlEsc(t.dateCol)}</th><th>${htmlEsc(t.colPlatform)}</th><th class="num">${htmlEsc(t.colEarned)}</th><th class="num">${htmlEsc(t.milesCol)}</th><th class="num">${htmlEsc(t.hoursCol)}</th></tr>
+    ${detailRows || '<tr><td colspan="5">${htmlEsc(t.noRecords)}</td></tr>'}
   </table>
 
-  <div class="footer">Gig ZipFinder · Reporte generado en el dispositivo · ${htmlEsc(DEDUCTION_DISCLAIMER)}</div>
+  <div class="footer">${htmlEsc(t.footer(disclaimer))}</div>
 </body>
 </html>`;
 }
@@ -387,19 +381,19 @@ export async function exportTaxPDF(month: string): Promise<void> {
     const { uri } = await Print.printToFileAsync({ html });
     if (!(await Sharing.isAvailableAsync())) {
       Alert.alert(
-        'PDF generado',
-        'El PDF se generó, pero este dispositivo no puede compartirlo.',
+        getStrings().exportSvc.pdfReady,
+        getStrings().exportSvc.pdfNoShare,
       );
       return;
     }
     await Sharing.shareAsync(uri, {
       mimeType: 'application/pdf',
-      dialogTitle: 'Compartir reporte PDF',
+      dialogTitle: getStrings().exportSvc.sharePdf,
     });
   } catch {
     Alert.alert(
-      'No se pudo exportar',
-      'Ocurrió un error al generar el PDF. Inténtalo de nuevo.',
+      getStrings().exportSvc.exportFailed,
+      getStrings().exportSvc.pdfError,
     );
   }
 }

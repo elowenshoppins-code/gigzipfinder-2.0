@@ -35,8 +35,10 @@ import {
   subscribeToolkit,
   useToolkitAccess,
 } from '../src/services/monetization';
+import { useStrings } from '../src/i18n';
+import { theme } from '../src/theme';
 
-const GREEN = '#00A651';
+const GREEN = theme.primary;
 
 interface ZoneStat {
   zone: string;
@@ -60,6 +62,7 @@ function slotLabel(hour: number): string {
 const ALL = 'all';
 
 export default function HotZonesScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   if (!hasAccess) {
@@ -67,12 +70,8 @@ export default function HotZonesScreen() {
       <Screen>
         <Paywall
           title="Hot Zones"
-          priceText="$10/mes"
-          features={[
-            'Descubre en qué zonas te ha ido mejor',
-            'Ranking por $/hora basado en tu historial',
-            'Tus franjas horarias con más actividad',
-          ]}
+          priceText={t.common.perMonth}
+          features={t.hotzones.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -90,6 +89,7 @@ export default function HotZonesScreen() {
 }
 
 function HotZonesContent() {
+  const t = useStrings();
   const [platform, setPlatform] = useState<string>(ALL);
   const [entries, setEntries] = useState<EarningEntry[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -128,7 +128,7 @@ function HotZonesContent() {
   const zoneRanking: ZoneStat[] = useMemo(() => {
     const byZone = new Map<string, ZoneStat>();
     for (const e of filtered) {
-      const zone = e.zone && e.zone.trim() !== '' ? e.zone : 'Sin zona';
+      const zone = e.zone && e.zone.trim() !== '' ? e.zone : t.hotzones.noZone;
       const prev = byZone.get(zone) ?? {
         zone,
         totalEarnings: 0,
@@ -148,7 +148,7 @@ function HotZonesContent() {
       }))
       .sort((a, b) => b.perHour - a.perHour)
       .slice(0, 5);
-  }, [filtered]);
+  }, [filtered, t]);
 
   /** Franjas de 3h con más actividad (desde trips reales). */
   const topSlots: SlotStat[] = useMemo(() => {
@@ -167,22 +167,22 @@ function HotZonesContent() {
 
   const platformName =
     platform === ALL
-      ? 'Todas las plataformas'
+      ? t.hotzones.allPlatforms
       : PLATFORMS.find((p) => p.id === platform)?.name ?? platform;
 
   return (
     <Screen>
       <Text style={styles.heading}>Hot Zones</Text>
-      <Text style={styles.question}>¿Dónde me conviene trabajar ahora?</Text>
+      <Text style={styles.question}>{t.hotzones.title}</Text>
 
-      <Text style={styles.label}>Plataforma</Text>
+      <Text style={styles.label}>{t.hotzones.fieldPlatform}</Text>
       <View style={styles.chips}>
         <TouchableOpacity
           style={[styles.chip, platform === ALL && styles.chipActive]}
           onPress={() => setPlatform(ALL)}
         >
           <Text style={[styles.chipText, platform === ALL && styles.chipTextActive]}>
-            Todas
+            {t.hotzones.chipAll}
           </Text>
         </TouchableOpacity>
         {PLATFORMS.map((p) => (
@@ -205,15 +205,15 @@ function HotZonesContent() {
       ) : zoneRanking.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.body}>
-            Aún no tienes registros de ganancias
-            {platform === ALL ? '' : ` en ${platformName}`}. Cuando registres
-            tus turnos en Ganancias, aquí verás en qué zonas te va mejor.
+            {t.hotzones.emptyMsg(
+              platform === ALL ? '' : t.hotzones.platformSuffix(platformName),
+            )}
           </Text>
         </View>
       ) : (
         <View>
           <Text style={styles.sectionTitle}>
-            Tus mejores zonas · {platformName}
+            {t.hotzones.bestZonesFor(platformName)}
           </Text>
           {zoneRanking.map((z, i) => (
             <View key={z.zone} style={styles.zoneRow}>
@@ -223,25 +223,23 @@ function HotZonesContent() {
               <View style={styles.zoneMain}>
                 <Text style={styles.zoneName}>{z.zone}</Text>
                 <Text style={styles.zoneSub}>
-                  {z.count} registro{z.count === 1 ? '' : 's'}
+                  {t.hotzones.recordsCount(z.count)}
                 </Text>
               </View>
-              <Text style={styles.zonePerHour}>{fmtMoney(z.perHour)}/h</Text>
+              <Text style={styles.zonePerHour}>{fmtMoney(z.perHour)}{t.hotzones.perHourSuffix}</Text>
             </View>
           ))}
 
           {topSlots.length > 0 && (
             <View>
-              <Text style={styles.sectionTitle}>
-                Tus franjas con más actividad
-              </Text>
+              <Text style={styles.sectionTitle}>{t.hotzones.slotsTitle}</Text>
               <View style={styles.cardsRow}>
                 {topSlots.map((s) => (
                   <StatCard
                     key={s.slot}
                     label={s.slot}
                     value={`${s.trips}`}
-                    sub={s.trips === 1 ? 'viaje' : 'viajes'}
+                    sub={t.hotzones.tripUnit(s.trips)}
                   />
                 ))}
               </View>
@@ -253,8 +251,7 @@ function HotZonesContent() {
       {/* Copia honesta obligatoria */}
       <View style={styles.honestBox}>
         <Text style={styles.honestText}>
-          Basado en tu historial. No predecimos dónde aparecerán órdenes; son
-          zonas donde a TI te ha ido mejor.
+          {t.hotzones.honestBox}
         </Text>
       </View>
     </Screen>
@@ -265,19 +262,19 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 4,
   },
   question: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 16,
   },
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 8,
   },
   chips: {
@@ -287,7 +284,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -296,11 +293,11 @@ const styles = StyleSheet.create({
   },
   chipActive: {
     borderColor: GREEN,
-    backgroundColor: '#EAF7EF',
+    backgroundColor: theme.successBg,
   },
   chipText: {
     fontSize: 14,
-    color: '#0A0A0A',
+    color: theme.text,
   },
   chipTextActive: {
     color: GREEN,
@@ -314,13 +311,13 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
     lineHeight: 22,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
     marginTop: 4,
   },
@@ -328,17 +325,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
   },
   rank: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#EAF7EF',
+    backgroundColor: theme.successBg,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -354,11 +351,11 @@ const styles = StyleSheet.create({
   zoneName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   zoneSub: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   zonePerHour: {
     fontSize: 18,
@@ -371,14 +368,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   honestBox: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderRadius: 12,
     padding: 14,
     marginTop: 16,
   },
   honestText: {
     fontSize: 13,
-    color: '#4B5563',
+    color: theme.textBody,
     lineHeight: 20,
     fontStyle: 'italic',
   },

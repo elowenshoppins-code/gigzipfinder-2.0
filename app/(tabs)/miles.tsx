@@ -13,8 +13,7 @@
  * - db/database: getSetting(), setSetting(), Trip
  * - utils/format: fmtMiles(n), fmtMoney(n), isoDate(Date), todayISO()
  * - utils/irs: estimateDeduction(miles) → {miles, rate, total},
- *   deductionForPeriod(trips) → {miles, total, breakdown},
- *   DEDUCTION_DISCLAIMER
+ *   deductionForPeriod(trips) → {miles, total, breakdown}
  * - services/mileage: todo el rastreo y persistencia de viajes
  *
  * NOTA DE RUTAS: desde app/(tabs)/ se importa con '../../src/...',
@@ -47,11 +46,7 @@ import {
 } from '../../src/services/monetization';
 import { getSetting, setSetting, type Trip } from '../../src/db/database';
 import { fmtMiles, fmtMoney, isoDate, todayISO } from '../../src/utils/format';
-import {
-  DEDUCTION_DISCLAIMER,
-  deductionForPeriod,
-  estimateDeduction,
-} from '../../src/utils/irs';
+import { deductionForPeriod, estimateDeduction } from '../../src/utils/irs';
 import {
   addManualTrip,
   deleteTrip,
@@ -71,12 +66,14 @@ import {
   updateTrip,
   type MilesSummary,
 } from '../../src/services/mileage';
+import { useStrings } from '../../src/i18n';
+import { theme } from '../../src/theme';
 
-const GREEN = '#00A651';
-const INK = '#0A0A0A';
-const GRAY = '#6B7280';
-const LIGHT = '#F6F7F6';
-const RED = '#DC2626';
+const GREEN = theme.primary;
+const INK = theme.text;
+const GRAY = theme.textMuted;
+const LIGHT = theme.card;
+const RED = theme.danger;
 
 type PlatformOption = { key: string; label: string };
 const PLATFORMS: PlatformOption[] = [
@@ -87,9 +84,6 @@ const PLATFORMS: PlatformOption[] = [
   { key: 'lyft', label: 'Lyft' },
   { key: 'roadie', label: 'Roadie' },
 ];
-
-const platformLabel = (key: string | null): string =>
-  PLATFORMS.find((p) => p.key === key)?.label ?? 'Sin plataforma';
 
 /* ---------- ayudas de fecha/hora (hora local del teléfono) ---------- */
 
@@ -120,16 +114,20 @@ function fmtClock(ms: number): string {
     String(d.getMinutes()).padStart(2, '0')
   );
 }
-function fmtDuration(ms: number): string {
-  const mins = Math.max(0, Math.round(ms / 60000));
-  const h = Math.floor(mins / 60);
-  return h > 0 ? `${h} h ${mins % 60} min` : `${mins} min`;
-}
-
 /* ================================================================== */
 
 export default function MilesScreen() {
+  const t = useStrings();
   const [toolkitAccess, refreshToolkit] = useToolkitAccess();
+
+  const platformLabel = (key: string | null): string =>
+    PLATFORMS.find((p) => p.key === key)?.label ?? t.miles.noPlatform;
+
+  const fmtDuration = (ms: number): string => {
+    const mins = Math.max(0, Math.round(ms / 60000));
+    const h = Math.floor(mins / 60);
+    return t.miles.durationFmt(h, mins % 60);
+  };
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -231,10 +229,7 @@ export default function MilesScreen() {
       const ok = await ensureLocationPermissions();
       if (!ok) {
         setPermDenied(true);
-        Alert.alert(
-          'Permiso de ubicación',
-          'Activa el permiso de ubicación (incluido "permitir siempre") en los ajustes del teléfono para registrar tus millas.',
-        );
+        Alert.alert(t.miles.permTitle, t.miles.permMsgTrip);
         return;
       }
       setPermDenied(false);
@@ -245,10 +240,7 @@ export default function MilesScreen() {
       await startTrip(platform);
       await reload();
     } catch {
-      Alert.alert(
-        'Error',
-        'No se pudo iniciar el viaje. Inténtalo de nuevo.',
-      );
+      Alert.alert(t.common.error, t.miles.errStartTrip);
     } finally {
       setBusy(false);
     }
@@ -256,12 +248,12 @@ export default function MilesScreen() {
 
   const handleEndTrip = () => {
     Alert.alert(
-      'Terminar viaje',
-      `¿Terminar el viaje actual (${fmtMiles(activeTrip?.distanceMiles ?? 0)})?`,
+      t.miles.endTripTitle,
+      t.miles.endTripMsg(fmtMiles(activeTrip?.distanceMiles ?? 0)),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t.common.cancelar, style: 'cancel' },
         {
-          text: 'Terminar',
+          text: t.miles.endTripConfirm,
           style: 'destructive',
           onPress: async () => {
             await endTrip();
@@ -287,17 +279,14 @@ export default function MilesScreen() {
       const ok = await ensureLocationPermissions();
       if (!ok) {
         setPermDenied(true);
-        Alert.alert(
-          'Permiso de ubicación',
-          'Activa el permiso de ubicación en los ajustes del teléfono para registrar tu jornada.',
-        );
+        Alert.alert(t.miles.permTitle, t.miles.permMsgWorkday);
         return;
       }
       setPermDenied(false);
       await startWorkday();
       await reload();
     } catch {
-      Alert.alert('Error', 'No se pudo iniciar la jornada.');
+      Alert.alert(t.common.error, t.miles.errStartWorkday);
     }
   };
 
@@ -306,12 +295,12 @@ export default function MilesScreen() {
       const { miles, trips: count } = await endWorkday();
       const ded = estimateDeduction(miles);
       Alert.alert(
-        'Jornada terminada',
-        `${fmtMiles(miles)} en ${count} viaje(s) de trabajo hoy.\nDeducción estimada: ${fmtMoney(ded.total)}`,
+        t.miles.workdayDoneTitle,
+        t.miles.workdayDoneMsg(fmtMiles(miles), count, fmtMoney(ded.total)),
       );
       await reload();
     } catch {
-      Alert.alert('Error', 'No se pudo terminar la jornada.');
+      Alert.alert(t.common.error, t.miles.errEndWorkday);
     }
   };
 
@@ -320,10 +309,7 @@ export default function MilesScreen() {
       const ok = await ensureLocationPermissions();
       if (!ok) {
         setPermDenied(true);
-        Alert.alert(
-          'Permiso de ubicación',
-          'Sin acceso a la ubicación no podemos detectar tus viajes automáticamente. Actívalo en los ajustes del teléfono.',
-        );
+        Alert.alert(t.miles.permTitle, t.miles.permMsgAuto);
         return;
       }
       setPermDenied(false);
@@ -344,21 +330,17 @@ export default function MilesScreen() {
   };
 
   const confirmDelete = (id: string) => {
-    Alert.alert(
-      'Eliminar viaje',
-      '¿Eliminar este registro de millas? Esta acción no se puede deshacer.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteTrip(id);
-            await reload();
-          },
+    Alert.alert(t.miles.delTitle, t.miles.delMsg, [
+      { text: t.common.cancelar, style: 'cancel' },
+      {
+        text: t.common.eliminar,
+        style: 'destructive',
+        onPress: async () => {
+          await deleteTrip(id);
+          await reload();
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const openEdit = (trip: Trip) => {
@@ -373,10 +355,7 @@ export default function MilesScreen() {
     if (!editing) return;
     const miles = parseFloat(editMiles.replace(',', '.'));
     if (!Number.isFinite(miles) || miles < 0) {
-      Alert.alert(
-        'Revisa las millas',
-        'Escribe un número válido mayor o igual a 0.',
-      );
+      Alert.alert(t.miles.checkMilesTitle, t.miles.checkMilesMsg);
       return;
     }
     await updateTrip(editing.id, {
@@ -401,14 +380,11 @@ export default function MilesScreen() {
   const saveManual = async () => {
     const miles = parseFloat(manualMiles.replace(',', '.'));
     if (!Number.isFinite(miles) || miles <= 0) {
-      Alert.alert('Revisa las millas', 'Escribe un número mayor a 0.');
+      Alert.alert(t.miles.checkMilesTitle, t.miles.checkMilesPositive);
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(manualDate)) {
-      Alert.alert(
-        'Revisa la fecha',
-        'Usa el formato AAAA-MM-DD (p. ej. 2026-10-12).',
-      );
+      Alert.alert(t.miles.checkDateTitle, t.miles.checkDateMsg);
       return;
     }
     try {
@@ -423,8 +399,8 @@ export default function MilesScreen() {
       await reload();
     } catch (e) {
       Alert.alert(
-        'Error',
-        e instanceof Error ? e.message : 'No se pudo guardar el viaje.',
+        t.common.error,
+        e instanceof Error ? e.message : t.miles.errSaveTrip,
       );
     }
   };
@@ -474,7 +450,7 @@ export default function MilesScreen() {
         <Text
           style={[styles.chipText, selected === null && styles.chipTextSelected]}
         >
-          Sin plataforma
+          {t.miles.noPlatform}
         </Text>
       </Pressable>
     </View>
@@ -495,7 +471,7 @@ export default function MilesScreen() {
             value === 'work' && styles.segmentTextOn,
           ]}
         >
-          Trabajo
+          {t.miles.purposeWork}
         </Text>
       </Pressable>
       <Pressable
@@ -508,7 +484,7 @@ export default function MilesScreen() {
             value === 'personal' && styles.segmentTextOn,
           ]}
         >
-          Personal
+          {t.miles.purposePersonal}
         </Text>
       </Pressable>
     </View>
@@ -516,17 +492,12 @@ export default function MilesScreen() {
 
   const header = (
     <View>
-      <Text style={styles.title}>Gig Miles</Text>
-      <Text style={styles.subtitle}>
-        Registra tus millas de trabajo para tu deducción fiscal.
-      </Text>
+      <Text style={styles.title}>{t.miles.title}</Text>
+      <Text style={styles.subtitle}>{t.miles.subtitle}</Text>
 
       {permDenied ? (
         <View style={styles.warnBox}>
-          <Text style={styles.warnText}>
-            Permiso de ubicación denegado. El rastreo automático no funcionará
-            hasta que lo actives en los ajustes del teléfono.
-          </Text>
+          <Text style={styles.warnText}>{t.miles.permDeniedWarn}</Text>
         </View>
       ) : null}
 
@@ -534,11 +505,11 @@ export default function MilesScreen() {
       {activeTrip ? (
         <View style={styles.tripCard}>
           <View style={styles.tripCardHeader}>
-            <Text style={styles.tripCardTitle}>Viaje en curso</Text>
+            <Text style={styles.tripCardTitle}>{t.miles.tripInProgress}</Text>
             {paused ? (
-              <Text style={styles.pausedBadge}>Pausado</Text>
+              <Text style={styles.pausedBadge}>{t.miles.paused}</Text>
             ) : (
-              <Text style={styles.liveBadge}>En vivo</Text>
+              <Text style={styles.liveBadge}>{t.miles.live}</Text>
             )}
           </View>
           <Text style={styles.tripMiles}>
@@ -548,7 +519,7 @@ export default function MilesScreen() {
             {platformLabel(activeTrip.platform)} ·{' '}
             {fmtDuration(Date.now() - activeTrip.startTime)}
             {liveDeduction
-              ? ` · ≈ ${fmtMoney(liveDeduction.total)} deducibles`
+              ? t.miles.deductibleApprox(fmtMoney(liveDeduction.total))
               : ''}
           </Text>
           <View style={styles.row}>
@@ -557,27 +528,27 @@ export default function MilesScreen() {
                 style={[styles.primaryBtn, styles.flex]}
                 onPress={handleResume}
               >
-                <Text style={styles.primaryBtnText}>Reanudar viaje</Text>
+                <Text style={styles.primaryBtnText}>{t.miles.resumeTrip}</Text>
               </Pressable>
             ) : (
               <Pressable
                 style={[styles.secondaryBtn, styles.flex]}
                 onPress={handlePause}
               >
-                <Text style={styles.secondaryBtnText}>Pausar</Text>
+                <Text style={styles.secondaryBtnText}>{t.miles.pause}</Text>
               </Pressable>
             )}
             <Pressable
               style={[styles.dangerBtn, styles.flex]}
               onPress={handleEndTrip}
             >
-              <Text style={styles.dangerBtnText}>Terminar</Text>
+              <Text style={styles.dangerBtnText}>{t.miles.end}</Text>
             </Pressable>
           </View>
         </View>
       ) : (
         <View style={styles.tripCard}>
-          <Text style={styles.tripCardTitle}>Plataforma del viaje</Text>
+          <Text style={styles.tripCardTitle}>{t.miles.tripPlatform}</Text>
           {platformChips(platform, setPlatform)}
           <Pressable
             style={styles.primaryBtn}
@@ -585,9 +556,9 @@ export default function MilesScreen() {
             disabled={busy}
           >
             {busy ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={theme.onPrimary} />
             ) : (
-              <Text style={styles.primaryBtnText}>Iniciar viaje</Text>
+              <Text style={styles.primaryBtnText}>{t.miles.startTrip}</Text>
             )}
           </Pressable>
         </View>
@@ -596,20 +567,20 @@ export default function MilesScreen() {
       {/* Jornada */}
       <View style={styles.workdayRow}>
         <View style={styles.flex}>
-          <Text style={styles.sectionLabel}>Jornada</Text>
+          <Text style={styles.sectionLabel}>{t.miles.workday}</Text>
           <Text style={styles.muted}>
             {workdayStart
-              ? `En curso desde las ${fmtClock(workdayStart)}`
-              : 'Sin jornada activa'}
+              ? t.miles.workdayActiveSince(fmtClock(workdayStart))
+              : t.miles.noWorkday}
           </Text>
         </View>
         {workdayStart ? (
           <Pressable style={styles.secondaryBtn} onPress={handleEndWorkday}>
-            <Text style={styles.secondaryBtnText}>Terminar jornada</Text>
+            <Text style={styles.secondaryBtnText}>{t.miles.endWorkday}</Text>
           </Pressable>
         ) : (
           <Pressable style={styles.secondaryBtn} onPress={handleStartWorkday}>
-            <Text style={styles.secondaryBtnText}>Iniciar jornada</Text>
+            <Text style={styles.secondaryBtnText}>{t.miles.startWorkday}</Text>
           </Pressable>
         )}
       </View>
@@ -617,56 +588,53 @@ export default function MilesScreen() {
       {/* Auto-detección */}
       <View style={styles.autoRow}>
         <View style={styles.flex}>
-          <Text style={styles.sectionLabel}>Detección automática</Text>
-          <Text style={styles.muted}>
-            Inicia viajes solo al detectar conducción y pausa si te detienes
-            20 min.
-          </Text>
+          <Text style={styles.sectionLabel}>{t.miles.autoDetect}</Text>
+          <Text style={styles.muted}>{t.miles.autoDetectDesc}</Text>
         </View>
         <Switch
           value={autoDetect}
           onValueChange={(v) => {
             void toggleAutoDetect(v);
           }}
-          trackColor={{ false: '#D1D5DB', true: GREEN }}
+          trackColor={{ false: theme.border, true: GREEN }}
         />
       </View>
 
       {/* Resumen */}
-      <Text style={styles.sectionTitle}>Resumen de millas de trabajo</Text>
+      <Text style={styles.sectionTitle}>{t.miles.summaryTitle}</Text>
       <View style={styles.grid}>
         <StatCard
-          label="Hoy"
+          label={t.miles.today}
           value={fmtMiles(summary.today)}
-          sub={`≈ ${fmtMoney(dedDay.total)}`}
+          sub={t.miles.approxSub(fmtMoney(dedDay.total))}
         />
         <StatCard
-          label="Esta semana"
+          label={t.miles.thisWeek}
           value={fmtMiles(summary.week)}
-          sub={`≈ ${fmtMoney(dedWeek.total)}`}
+          sub={t.miles.approxSub(fmtMoney(dedWeek.total))}
         />
       </View>
       <View style={[styles.grid, { marginTop: 10 }]}>
         <StatCard
-          label="Este mes"
+          label={t.miles.thisMonth}
           value={fmtMiles(summary.month)}
-          sub={`≈ ${fmtMoney(dedMonth.total)}`}
+          sub={t.miles.approxSub(fmtMoney(dedMonth.total))}
         />
         <StatCard
-          label="Este año"
+          label={t.miles.thisYear}
           value={fmtMiles(summary.year)}
-          sub={`≈ ${fmtMoney(dedYear.total)}`}
+          sub={t.miles.approxSub(fmtMoney(dedYear.total))}
         />
       </View>
       <Text style={styles.disclaimer}>
-        Deducción estimada con la tarifa estándar del IRS. {DEDUCTION_DISCLAIMER}
+        {t.miles.deductionNote} {t.irs.disclaimer}
       </Text>
 
       {/* Historial */}
       <View style={styles.historyHeader}>
-        <Text style={styles.sectionTitle}>Historial de viajes</Text>
+        <Text style={styles.sectionTitle}>{t.miles.historyTitle}</Text>
         <Pressable style={styles.linkBtn} onPress={openManual}>
-          <Text style={styles.linkText}>+ Agregar manual</Text>
+          <Text style={styles.linkText}>{t.miles.addManual}</Text>
         </Pressable>
       </View>
     </View>
@@ -682,7 +650,7 @@ export default function MilesScreen() {
           {platformLabel(item.platform)}
           {item.endTime
             ? ` · ${fmtDuration(item.endTime - item.startTime)}`
-            : ' · en curso'}
+            : t.miles.ongoingSuffix}
           {item.notes ? ` · ${item.notes}` : ''}
         </Text>
       </View>
@@ -696,7 +664,7 @@ export default function MilesScreen() {
         ]}
       >
         <Text style={styles.pillText}>
-          {item.purpose === 'work' ? 'Trabajo' : 'Personal'}
+          {item.purpose === 'work' ? t.miles.purposeWork : t.miles.purposePersonal}
         </Text>
       </Pressable>
       <Pressable onPress={() => openEdit(item)} style={styles.iconBtn}>
@@ -713,11 +681,8 @@ export default function MilesScreen() {
 
   const renderEmpty = () => (
     <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>Sin viajes todavía</Text>
-      <Text style={styles.emptyText}>
-        Inicia un viaje con el botón de arriba o agrega uno manual, y aquí
-        verás tu historial listo para tu declaración.
-      </Text>
+      <Text style={styles.emptyTitle}>{t.miles.emptyTitle}</Text>
+      <Text style={styles.emptyText}>{t.miles.emptyMsg}</Text>
     </View>
   );
 
@@ -727,14 +692,9 @@ export default function MilesScreen() {
     return (
       <Screen>
         <Paywall
-          title="Gig Miles"
-          priceText="$10/mes"
-          features={[
-            'Rastreo automático de millas en segundo plano',
-            'Detección automática de viajes al conducir',
-            'Estimación de deducción fiscal (tarifa IRS)',
-            'Historial editable y viajes manuales',
-          ]}
+          title={t.miles.paywallTitle}
+          priceText={t.common.perMonth}
+          features={t.miles.paywallFeatures}
           onBuy={handleSubscribe}
           onRestore={restorePurchases}
         />
@@ -769,8 +729,8 @@ export default function MilesScreen() {
       >
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Editar viaje</Text>
-            <Text style={styles.fieldLabel}>Millas</Text>
+            <Text style={styles.modalTitle}>{t.miles.editTrip}</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldMiles}</Text>
             <TextInput
               style={styles.input}
               value={editMiles}
@@ -778,23 +738,23 @@ export default function MilesScreen() {
               keyboardType="decimal-pad"
               placeholder="0.0"
             />
-            <Text style={styles.fieldLabel}>Propósito</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldPurpose}</Text>
             {purposeToggle(editPurpose, setEditPurpose)}
-            <Text style={styles.fieldLabel}>Plataforma</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldPlatform}</Text>
             {platformChips(editPlatform, setEditPlatform)}
-            <Text style={styles.fieldLabel}>Notas</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldNotes}</Text>
             <TextInput
               style={styles.input}
               value={editNotes}
               onChangeText={setEditNotes}
-              placeholder="Notas (opcional)"
+              placeholder={t.miles.notesPh}
             />
             <View style={styles.row}>
               <Pressable
                 style={[styles.secondaryBtn, styles.flex]}
                 onPress={() => setEditing(null)}
               >
-                <Text style={styles.secondaryBtnText}>Cancelar</Text>
+                <Text style={styles.secondaryBtnText}>{t.common.cancelar}</Text>
               </Pressable>
               <Pressable
                 style={[styles.primaryBtn, styles.flex]}
@@ -802,7 +762,7 @@ export default function MilesScreen() {
                   void saveEdit();
                 }}
               >
-                <Text style={styles.primaryBtnText}>Guardar</Text>
+                <Text style={styles.primaryBtnText}>{t.common.guardar}</Text>
               </Pressable>
             </View>
           </View>
@@ -818,15 +778,15 @@ export default function MilesScreen() {
       >
         <View style={styles.overlay}>
           <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Agregar viaje manual</Text>
-            <Text style={styles.fieldLabel}>Fecha (AAAA-MM-DD)</Text>
+            <Text style={styles.modalTitle}>{t.miles.addManualTitle}</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldDate}</Text>
             <TextInput
               style={styles.input}
               value={manualDate}
               onChangeText={setManualDate}
-              placeholder="2026-10-12"
+              placeholder={t.miles.datePh}
             />
-            <Text style={styles.fieldLabel}>Millas</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldMiles}</Text>
             <TextInput
               style={styles.input}
               value={manualMiles}
@@ -834,23 +794,23 @@ export default function MilesScreen() {
               keyboardType="decimal-pad"
               placeholder="0.0"
             />
-            <Text style={styles.fieldLabel}>Propósito</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldPurpose}</Text>
             {purposeToggle(manualPurpose, setManualPurpose)}
-            <Text style={styles.fieldLabel}>Plataforma</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldPlatform}</Text>
             {platformChips(manualPlatform, setManualPlatform)}
-            <Text style={styles.fieldLabel}>Notas</Text>
+            <Text style={styles.fieldLabel}>{t.miles.fieldNotes}</Text>
             <TextInput
               style={styles.input}
               value={manualNotes}
               onChangeText={setManualNotes}
-              placeholder="Notas (opcional)"
+              placeholder={t.miles.notesPh}
             />
             <View style={styles.row}>
               <Pressable
                 style={[styles.secondaryBtn, styles.flex]}
                 onPress={() => setAddingManual(false)}
               >
-                <Text style={styles.secondaryBtnText}>Cancelar</Text>
+                <Text style={styles.secondaryBtnText}>{t.common.cancelar}</Text>
               </Pressable>
               <Pressable
                 style={[styles.primaryBtn, styles.flex]}
@@ -858,7 +818,7 @@ export default function MilesScreen() {
                   void saveManual();
                 }}
               >
-                <Text style={styles.primaryBtnText}>Guardar</Text>
+                <Text style={styles.primaryBtnText}>{t.common.guardar}</Text>
               </Pressable>
             </View>
           </View>
@@ -877,15 +837,15 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: INK },
   subtitle: { fontSize: 14, color: GRAY, marginTop: 4, marginBottom: 12 },
   warnBox: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.warningBg,
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
   },
-  warnText: { fontSize: 13, color: '#92400E' },
+  warnText: { fontSize: 13, color: theme.warning },
   tripCard: {
     backgroundColor: LIGHT,
-    borderRadius: 14,
+    borderRadius: theme.radiusCard,
     padding: 16,
     marginBottom: 12,
   },
@@ -900,7 +860,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: GREEN,
-    backgroundColor: '#DCFCE7',
+    backgroundColor: theme.successBg,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -908,8 +868,8 @@ const styles = StyleSheet.create({
   pausedBadge: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#92400E',
-    backgroundColor: '#FEF3C7',
+    color: theme.warning,
+    backgroundColor: theme.warningBg,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -925,9 +885,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 12,
   },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  primaryBtnText: { color: theme.onPrimary, fontSize: 17, fontWeight: '700' },
   secondaryBtn: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: theme.border,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -935,7 +895,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: INK, fontSize: 15, fontWeight: '600' },
   dangerBtn: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: theme.dangerBg,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
@@ -944,14 +904,14 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 10 },
   chip: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
   chipSelected: { backgroundColor: GREEN, borderColor: GREEN },
   chipText: { fontSize: 13, color: INK },
-  chipTextSelected: { color: '#FFFFFF', fontWeight: '700' },
+  chipTextSelected: { color: theme.onPrimary, fontWeight: '700' },
   workdayRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -998,9 +958,9 @@ const styles = StyleSheet.create({
   tripRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.bg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.border,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
@@ -1009,8 +969,8 @@ const styles = StyleSheet.create({
   tripRowTitle: { fontSize: 15, fontWeight: '700', color: INK },
   tripRowSub: { fontSize: 12, color: GRAY, marginTop: 2 },
   pill: { borderRadius: 20, paddingVertical: 6, paddingHorizontal: 10 },
-  pillWork: { backgroundColor: '#DCFCE7' },
-  pillPersonal: { backgroundColor: '#E5E7EB' },
+  pillWork: { backgroundColor: theme.successBg },
+  pillPersonal: { backgroundColor: theme.card },
   pillText: { fontSize: 12, fontWeight: '700', color: INK },
   iconBtn: { padding: 6 },
   iconText: { fontSize: 18 },
@@ -1019,11 +979,11 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: GRAY, textAlign: 'center' },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: theme.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -1039,7 +999,7 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -1059,7 +1019,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  segmentBtnOn: { backgroundColor: '#FFFFFF', elevation: 1 },
+  segmentBtnOn: { backgroundColor: theme.card, elevation: 1 },
   segmentText: { fontSize: 14, color: GRAY, fontWeight: '600' },
   segmentTextOn: { color: INK, fontWeight: '700' },
 });

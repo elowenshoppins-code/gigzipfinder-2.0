@@ -26,23 +26,8 @@ import {
 } from '../../src/services/monetization';
 import { answerQuery, type ChatMsg } from '../../src/services/gigai';
 import { uid } from '../../src/utils/format';
-
-const EXAMPLES = [
-  '¿Cuánto hice esta semana?',
-  '¿Cuál es mi mejor app?',
-  '¿Cuántas millas este mes?',
-  '¿Cuánto gasté en gasolina?',
-  '¿Qué documentos vencen pronto?',
-];
-
-const INITIAL_MSG: ChatMsg = {
-  id: 'gigai-init',
-  from: 'bot',
-  text:
-    '¡Hola! Soy Gig AI 🤖\n' +
-    'Respondo con tus datos locales: ganancias, millas, documentos, impuestos y más.\n\n' +
-    'Toca una pregunta para empezar:',
-};
+import { useStrings } from '../../src/i18n';
+import { theme } from '../../src/theme';
 
 function Bubble({
   msg,
@@ -72,10 +57,15 @@ function Bubble({
 }
 
 export default function GigAIScreen() {
+  const t = useStrings();
   const [toolkitAccess, refreshToolkit] = useToolkitAccess();
-  const [messages, setMessages] = useState<ChatMsg[]>([INITIAL_MSG]);
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { id: 'gigai-init', from: 'bot', text: t.gigai.greeting },
+  ]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+
+  const examples = t.gigai.examples;
 
   useFocusEffect(
     useCallback(() => {
@@ -100,7 +90,7 @@ export default function GigAIScreen() {
           {
             id: uid(),
             from: 'bot',
-            text: 'Ups, algo falló al consultar tus datos. Inténtalo de nuevo.',
+            text: t.gigai.queryError,
           },
           ...prev,
         ]);
@@ -108,7 +98,7 @@ export default function GigAIScreen() {
         setSending(false);
       }
     },
-    [sending],
+    [sending, t],
   );
 
   const goAction = useCallback((route: string) => {
@@ -120,12 +110,8 @@ export default function GigAIScreen() {
       <Screen scroll={false}>
         <Paywall
           title="Gig AI"
-          priceText="$10/mes"
-          features={[
-            'Respuestas con tus datos locales',
-            'Ganancias, millas, gasolina y documentos',
-            'Tu mejor plataforma y resumen de impuestos',
-          ]}
+          priceText={t.common.perMonth}
+          features={t.gigai.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshToolkit();
@@ -155,7 +141,7 @@ export default function GigAIScreen() {
 
         {showExamples ? (
           <View style={styles.chips}>
-            {EXAMPLES.map((ex) => (
+            {examples.map((ex) => (
               <Pressable
                 key={ex}
                 style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
@@ -168,13 +154,13 @@ export default function GigAIScreen() {
         ) : null}
 
         {sending ? (
-          <Text style={styles.typing}>Gig AI está escribiendo…</Text>
+          <Text style={styles.typing}>{t.gigai.typing}</Text>
         ) : null}
 
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
-            placeholder="Pregúntame algo…"
+            placeholder={t.gigai.inputPh}
             value={input}
             onChangeText={setInput}
             onSubmitEditing={() => send(input)}
@@ -186,13 +172,11 @@ export default function GigAIScreen() {
             onPress={() => send(input)}
             disabled={sending}
           >
-            <Text style={styles.sendButtonText}>Enviar</Text>
+            <Text style={styles.sendButtonText}>{t.common.enviar}</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.note}>
-          Responde con tus datos locales. IA avanzada: próximamente (TODO API key).
-        </Text>
+        <Text style={styles.note}>{t.gigai.note}</Text>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -205,7 +189,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 8,
   },
   list: {
@@ -228,11 +212,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   bubbleUser: {
-    backgroundColor: '#00A651',
+    backgroundColor: theme.primary,
     borderBottomRightRadius: 4,
   },
   bubbleBot: {
-    backgroundColor: '#F6F7F6',
+    backgroundColor: theme.card,
     borderBottomLeftRadius: 4,
   },
   bubbleText: {
@@ -240,21 +224,21 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   bubbleTextUser: {
-    color: '#FFFFFF',
+    color: theme.text,
   },
   bubbleTextBot: {
-    color: '#0A0A0A',
+    color: theme.text,
   },
   actionButton: {
     marginTop: 8,
-    backgroundColor: '#0A0A0A',
-    borderRadius: 8,
+    backgroundColor: theme.text,
+    borderRadius: theme.radiusPill,
     paddingVertical: 8,
     paddingHorizontal: 12,
     alignSelf: 'flex-start',
   },
   actionButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontWeight: '700',
     fontSize: 14,
   },
@@ -266,19 +250,19 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: '#00A651',
+    borderColor: theme.primary,
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   chipText: {
-    color: '#00A651',
+    color: theme.primary,
     fontSize: 13,
     fontWeight: '600',
   },
   typing: {
     fontSize: 13,
-    color: '#9CA3AF',
+    color: theme.textMuted,
     fontStyle: 'italic',
     marginBottom: 6,
   },
@@ -290,22 +274,22 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 14,
     fontSize: 15,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.card,
   },
   sendButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 12,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 10,
     paddingHorizontal: 18,
     justifyContent: 'center',
   },
   sendButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontWeight: '700',
     fontSize: 15,
   },
@@ -314,7 +298,7 @@ const styles = StyleSheet.create({
   },
   note: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: theme.textMuted,
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 4,

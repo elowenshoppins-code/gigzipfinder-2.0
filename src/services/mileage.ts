@@ -34,6 +34,7 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { getDb, getSetting, setSetting, type Trip } from '../db/database';
 import { uid, haversineMiles } from '../utils/format';
+import { getStrings } from '../i18n';
 
 /** Nombre de la tarea de ubicación en segundo plano. */
 export const MILES_TASK = 'gig-miles-background';
@@ -198,7 +199,7 @@ export async function ensureLocationPermissions(): Promise<boolean> {
 export async function startBackgroundTracking(): Promise<void> {
   const granted = await ensureLocationPermissions();
   if (!granted) {
-    throw new Error('Permiso de ubicación denegado');
+    throw new Error(getStrings().mileageSvc.permDenied);
   }
   const started = await Location.hasStartedLocationUpdatesAsync(MILES_TASK);
   if (started) return;
@@ -220,7 +221,7 @@ export async function startBackgroundTracking(): Promise<void> {
       ? {
           foregroundService: {
             notificationTitle: 'Gig Miles',
-            notificationBody: 'Registrando tus millas de trabajo',
+            notificationBody: getStrings().mileageSvc.notifBody,
           },
         }
       : {}),
@@ -369,11 +370,11 @@ export async function addManualTrip(input: {
   notes?: string;
 }): Promise<void> {
   if (!Number.isFinite(input.miles) || input.miles <= 0) {
-    throw new Error('Millas inválidas');
+    throw new Error(getStrings().mileageSvc.invalidMiles);
   }
   const [y, m, d] = input.date.split('-').map(Number);
   if (!y || !m || !d) {
-    throw new Error('Fecha inválida (usa el formato AAAA-MM-DD)');
+    throw new Error(getStrings().mileageSvc.invalidDate);
   }
   const startTime = new Date(y, m - 1, d, 12, 0, 0).getTime();
   await getDb().runAsync(

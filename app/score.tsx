@@ -44,10 +44,12 @@ import {
   subscribeToolkit,
   useToolkitAccess,
 } from '../src/services/monetization';
+import { useStrings } from '../src/i18n';
+import { theme } from '../src/theme';
 
-const GREEN = '#00A651';
-const YELLOW = '#D97706';
-const RED = '#DC2626';
+const GREEN = theme.primary;
+const YELLOW = theme.warning;
+const RED = theme.danger;
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
@@ -104,6 +106,7 @@ const fmtDateLong = (dateISO: string) =>
   });
 
 export default function ScoreScreen() {
+  const t = useStrings();
   const [hasAccess, refreshAccess] = useToolkitAccess();
 
   if (!hasAccess) {
@@ -111,12 +114,8 @@ export default function ScoreScreen() {
       <Screen>
         <Paywall
           title="Driver Score"
-          priceText="$10/mes"
-          features={[
-            'Tu puntaje diario de conductor (0-100)',
-            'Desglose: $/hora, $/milla, millas vacías, espera y combustible',
-            'Tu mejor plataforma y tu mejor franja del día',
-          ]}
+          priceText={t.common.perMonth}
+          features={t.score.paywallFeatures}
           onBuy={async () => {
             await subscribeToolkit();
             refreshAccess();
@@ -134,6 +133,7 @@ export default function ScoreScreen() {
 }
 
 function ScoreContent() {
+  const t = useStrings();
   const [date, setDate] = useState<string>(todayISO());
   const [entries, setEntries] = useState<EarningEntry[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -282,7 +282,7 @@ function ScoreContent() {
           <Text style={styles.dateText}>{fmtDateLong(date)}</Text>
           {date !== todayISO() && (
             <TouchableOpacity onPress={() => setDate(todayISO())}>
-              <Text style={styles.todayLink}>Volver a hoy</Text>
+              <Text style={styles.todayLink}>{t.score.backToday}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -299,8 +299,7 @@ function ScoreContent() {
       ) : !breakdown ? (
         <View style={styles.emptyBox}>
           <Text style={styles.body}>
-            No hay registros para este día. Cuando registres tus ganancias en
-            el módulo de Ganancias, aquí verás tu puntaje.
+            {t.score.emptyDay}
           </Text>
         </View>
       ) : (
@@ -317,71 +316,71 @@ function ScoreContent() {
             >
               {breakdown.total}
             </Text>
-            <Text style={styles.scoreMax}>/ 100</Text>
+            <Text style={styles.scoreMax}>{t.score.scoreSuffix}</Text>
           </View>
 
-          <Text style={styles.sectionTitle}>Desglose del puntaje</Text>
+          <Text style={styles.sectionTitle}>{t.score.breakdownTitle}</Text>
           <ScoreRow
-            label="$/hora (30 pts)"
-            detail={`${fmtMoney(breakdown.perHour)}/h`}
+            label={t.score.perHourPts}
+            detail={`${fmtMoney(breakdown.perHour)}${t.score.perHourSuffix}`}
             points={breakdown.cHour}
             max={30}
           />
           <ScoreRow
-            label="$/milla (25 pts)"
-            detail={`${fmtMoney(breakdown.perMile)}/mi`}
+            label={t.score.perMilePts}
+            detail={`${fmtMoney(breakdown.perMile)}${t.score.perMileSuffix}`}
             points={breakdown.cMile}
             max={25}
           />
           <ScoreRow
-            label="Millas vacías (15 pts)"
-            detail={`${fmtMiles(breakdown.deadMiles)} vacías (est.)`}
+            label={t.score.deadMilesPts}
+            detail={t.score.deadMilesSub(fmtMiles(breakdown.deadMiles))}
             points={breakdown.cDead}
             max={15}
           />
           <ScoreRow
-            label="Tiempo de espera (10 pts)"
-            detail={`${breakdown.waitPerHour.toFixed(1)} min/h`}
+            label={t.score.waitPts}
+            detail={t.score.waitDetail(breakdown.waitPerHour.toFixed(1))}
             points={breakdown.cWait}
             max={10}
           />
           <ScoreRow
-            label="Combustible (20 pts)"
-            detail={`${fmtMoney(breakdown.fuelPerMile)}/mi`}
+            label={t.score.fuelPts}
+            detail={`${fmtMoney(breakdown.fuelPerMile)}${t.score.perMileSuffix}`}
             points={breakdown.cFuel}
             max={20}
           />
 
-          <Text style={styles.sectionTitle}>Lo mejor de tu día</Text>
+          <Text style={styles.sectionTitle}>{t.score.bestOfDay}</Text>
           <View style={styles.cardsRow}>
             <StatCard
-              label="Ganancia promedio"
-              value={`${fmtMoney(breakdown.perHour)}/h`}
-              sub={fmtMoney(totals.earnings) + ' en total'}
+              label={t.score.avgEarning}
+              value={`${fmtMoney(breakdown.perHour)}${t.score.perHourSuffix}`}
+              sub={fmtMoney(totals.earnings) + t.score.totalSuffix}
             />
             <StatCard
-              label="Costo combustible"
-              value={`${fmtMoney(breakdown.fuelPerMile)}/mi`}
-              sub={fmtMiles(totals.miles) + ' recorridas'}
+              label={t.score.fuelCost}
+              value={`${fmtMoney(breakdown.fuelPerMile)}${t.score.perMileSuffix}`}
+              sub={t.score.milesDriven(fmtMiles(totals.miles))}
             />
           </View>
           <View style={styles.cardsRow}>
             <StatCard
-              label="Mejor plataforma"
+              label={t.score.bestPlatformLabel}
               value={bestPlatform ? bestPlatform.name : '—'}
               sub={
                 bestPlatform
-                  ? `${fmtMoney(bestPlatform.perHour)}/h`
-                  : 'Sin datos'
+                  ? `${fmtMoney(bestPlatform.perHour)}${t.score.perHourSuffix}`
+                  : t.score.noData
               }
             />
             <StatCard
-              label="Franja con más actividad"
+              label={t.score.bestSlot}
               value={bestSlot ? bestSlot.slot : '—'}
               sub={
                 bestSlot
-                  ? `${bestSlot.trips} viaje${bestSlot.trips === 1 ? '' : 's'}`
-                  : 'Sin viajes'
+                  ? t.score.tripsCount(bestSlot.trips)
+                  : t.score.noTrips
               }
             />
           </View>
@@ -425,7 +424,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 12,
   },
   dateRow: {
@@ -438,7 +437,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    borderColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -454,7 +453,7 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#0A0A0A',
+    color: theme.text,
     textTransform: 'capitalize',
     textAlign: 'center',
   },
@@ -472,7 +471,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
     lineHeight: 22,
   },
   scoreCircle: {
@@ -494,12 +493,12 @@ const styles = StyleSheet.create({
   },
   scoreMax: {
     fontSize: 14,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A0A0A',
+    color: theme.text,
     marginBottom: 10,
     marginTop: 16,
   },
@@ -514,16 +513,16 @@ const styles = StyleSheet.create({
   scoreRowLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0A0A0A',
+    color: theme.text,
   },
   scoreRowDetail: {
     fontSize: 13,
-    color: '#6B7280',
+    color: theme.textMuted,
   },
   barTrack: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: theme.border,
     overflow: 'hidden',
   },
   barFill: {

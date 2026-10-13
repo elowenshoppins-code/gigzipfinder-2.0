@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
-import { t } from '../i18n';
+import { useStrings } from '../i18n';
+import { theme } from '../theme';
 
 type PaywallProps = {
   title: string;
@@ -11,6 +12,7 @@ type PaywallProps = {
 };
 
 export function Paywall({ title, priceText, features, onBuy, onRestore }: PaywallProps) {
+  const t = useStrings();
   const [loading, setLoading] = useState(false);
 
   const handleBuy = async () => {
@@ -42,7 +44,7 @@ export function Paywall({ title, priceText, features, onBuy, onRestore }: Paywal
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={theme.onPrimary} />
         ) : (
           <Text style={styles.buyButtonText}>{t.common.continuar}</Text>
         )}
@@ -50,7 +52,7 @@ export function Paywall({ title, priceText, features, onBuy, onRestore }: Paywal
 
       {onRestore ? (
         <Pressable onPress={onRestore} style={styles.restoreButton}>
-          <Text style={styles.restoreText}>Restaurar compras</Text>
+          <Text style={styles.restoreText}>{t.paywall.restore}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -67,14 +69,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#0A0A0A',
+    color: theme.text,
     textAlign: 'center',
     marginBottom: 8,
   },
   price: {
     fontSize: 40,
     fontWeight: '800',
-    color: '#00A651',
+    color: theme.primary,
     marginBottom: 24,
   },
   features: {
@@ -88,18 +90,18 @@ const styles = StyleSheet.create({
   },
   check: {
     fontSize: 18,
-    color: '#00A651',
+    color: theme.success,
     fontWeight: '700',
     marginRight: 10,
   },
   featureText: {
     fontSize: 15,
-    color: '#0A0A0A',
+    color: theme.text,
     flexShrink: 1,
   },
   buyButton: {
-    backgroundColor: '#00A651',
-    borderRadius: 12,
+    backgroundColor: theme.primary,
+    borderRadius: theme.radiusPill,
     paddingVertical: 14,
     paddingHorizontal: 32,
     alignSelf: 'stretch',
@@ -107,7 +109,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   buyButtonText: {
-    color: '#FFFFFF',
+    color: theme.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },
@@ -118,7 +120,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   restoreText: {
-    color: '#00A651',
+    color: theme.primary,
     fontSize: 15,
     fontWeight: '600',
   },

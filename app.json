@@ -50,11 +50,12 @@
     "scheme": "gigzipfinder",
     "slug": "gig-zipfinder-2",
     "splash": {
-      "backgroundColor": "#ffffff",
+      "backgroundColor": "#0A1628",
       "image": "./assets/splash.png",
       "resizeMode": "contain"
     },
-    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0A1628",
+    "userInterfaceStyle": "dark",
     "version": "2.0.0",
     "extra": {
       "router": {

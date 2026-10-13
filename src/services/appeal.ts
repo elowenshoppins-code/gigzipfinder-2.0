@@ -13,6 +13,7 @@
 import { getDb } from '../db/database';
 import type { AppealRecord } from '../db/database';
 import { todayISO, uid } from '../utils/format';
+import { getStrings } from '../i18n';
 
 /** Catálogo de plataformas soportadas por la apelación. */
 export const PLATFORMS = [
@@ -57,33 +58,13 @@ export type AppealQuestion = {
  * de la plataforma. La pregunta de evidencia es opcional.
  */
 export function wizardQuestions(platformName: string): AppealQuestion[] {
-  return [
-    {
-      key: 'motivo',
-      question: `¿Qué pasó con tu cuenta de ${platformName}? Cuéntanos con tus palabras por qué crees que te desactivaron.`,
-      placeholder: 'Ej.: Mi tasa de aceptación bajó después de rechazar varios pedidos lejanos…',
-    },
-    {
-      key: 'fecha',
-      question: '¿Cuándo ocurrió? (fecha aproximada de la desactivación)',
-      placeholder: 'AAAA-MM-DD · Ej.: 2026-10-01',
-    },
-    {
-      key: 'contexto',
-      question: `¿Qué dice la notificación que te envió ${platformName}?`,
-      placeholder: 'Ej.: Recibí un correo que decía que mi cuenta fue desactivada por…',
-    },
-    {
-      key: 'evidencia',
-      question: '¿Qué evidencia tienes a tu favor? (opcional)',
-      placeholder: 'Ej.: Capturas de pantalla, calificaciones altas, historial de entregas a tiempo…',
-    },
-    {
-      key: 'pedido',
-      question: '¿Qué pides en esta apelación?',
-      placeholder: 'Ej.: Que revisen mi caso y reactiven mi cuenta…',
-    },
-  ];
+  // Textos desde el diccionario i18n (idioma actual al momento de la llamada).
+  const qs = getStrings().appeal.questions;
+  return qs.map((dq) => ({
+    key: dq.key as keyof AppealAnswers,
+    question: dq.q(platformName),
+    placeholder: dq.ph,
+  }));
 }
 
 /** Carta formal de apelación en español. */
@@ -204,14 +185,9 @@ export async function deleteAppeal(id: string): Promise<void> {
 export async function analyzeDeactivationImage(
   _uri: string,
 ): Promise<{ likelyReasons: string[]; note: string }> {
+  const t = getStrings().appeal;
   return {
-    likelyReasons: [
-      'Tasa de aceptación baja',
-      'Retrasos reiterados en entregas',
-      'Reporte de un cliente',
-      'Documentos vencidos',
-      'Actividad sospechosa en la cuenta',
-    ],
-    note: 'TODO: conectar API de visión (p. ej. GPT-4o Vision) para analizar la captura real. Por ahora el usuario confirma el motivo.',
+    likelyReasons: [...t.reasons],
+    note: t.visionNote,
   };
 }

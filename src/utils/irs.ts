@@ -2,9 +2,11 @@
  * Cálculos de deducción por millaje (método de tarifa estándar del IRS).
  *
  * Esto es solo una estimación; el usuario debe consultar a un profesional.
+ *
+ * NOTA: el disclaimer fiscal vive en el diccionario i18n (`t.irs.disclaimer`);
+ * las pantallas y servicios deben usarlo en vez de una constante aquí.
  */
-
-export const DEDUCTION_DISCLAIMER = 'Estimación, no asesoría fiscal.';
+import { getStrings } from '../i18n';
 
 /**
  * Tarifa estándar del IRS por milla según la fecha.
@@ -53,7 +55,7 @@ export function deductionForPeriod(trips: TripLike[]): {
   );
 
   if (workTrips.length === 0) {
-    return { miles: 0, total: 0, breakdown: 'Sin viajes de trabajo en el periodo.' };
+    return { miles: 0, total: 0, breakdown: getStrings().irs.noWorkTrips };
   }
 
   // Agrupa millas por tarifa aplicable

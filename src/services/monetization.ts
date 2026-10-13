@@ -1,66 +1,43 @@
 /**
- * Monetización: compras simuladas (MOCK).
+ * Monetización — fachada pública de compras.
  *
- * El acceso se guarda en settings (SQLite) para que persista.
- * TODO: conectar RevenueCat / expo-in-app-purchases con los productos
- * reales antes de publicar en tiendas.
+ * Delega en el `activeProvider` de `./billing` (hoy: simulado;
+ * producción: RevenueCat). La API no cambia al cambiar de provider,
+ * así que las pantallas no necesitan modificarse.
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { getSetting, setSetting } from '../db/database';
+import { activeProvider } from './billing';
 
 export const ZIP_PRICE = 20; // USD, pago único por app de gig
 export const TOOLKIT_PRICE = 10; // USD/mes, suscripción al toolkit completo
 
-const ZIP_KEY = (app: string) => `zip_access_${app}`;
-const TOOLKIT_KEY = 'toolkit_sub';
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /** ¿El usuario compró el módulo de códigos ZIP para esta app? */
 export async function hasZipAccess(app: string): Promise<boolean> {
-  const v = await getSetting(ZIP_KEY(app));
-  return v === '1';
+  return activeProvider.hasZipAccess(app);
 }
 
-/**
- * Compra simulada del módulo ZIP ($20 pago único).
- * TODO: reemplazar el delay por el flujo real de RevenueCat /
- * expo-in-app-purchases con el producto configurado en App Store / Play.
- */
+/** Compra del módulo ZIP ($20 pago único). */
 export async function purchaseZip(app: string): Promise<void> {
-  await delay(800); // MOCK: latencia de compra simulada
-  await setSetting(ZIP_KEY(app), '1');
+  return activeProvider.purchaseZip(app);
 }
 
 /** ¿El usuario tiene la suscripción activa del toolkit ($10/mes)? */
 export async function hasToolkitAccess(): Promise<boolean> {
-  const v = await getSetting(TOOLKIT_KEY);
-  return v === 'active';
+  return activeProvider.hasToolkitAccess();
 }
 
-/**
- * Suscripción simulada al toolkit ($10/mes).
- * TODO: reemplazar por RevenueCat con el entitlement real.
- */
+/** Suscripción al toolkit ($10/mes). */
 export async function subscribeToolkit(): Promise<void> {
-  // TODO: RevenueCat — purchase del entitlement del toolkit
-  await setSetting(TOOLKIT_KEY, 'active');
+  return activeProvider.subscribeToolkit();
 }
 
-/**
- * Restaurar compras (MOCK).
- * TODO: RevenueCat — restorePurchases y sincronizar settings.
- */
+/** Restaurar compras previas. */
 export async function restorePurchases(): Promise<void> {
-  // MOCK: no hace nada
+  return activeProvider.restorePurchases();
 }
 
-/**
- * Hook: acceso al toolkit. Devuelve [acceso, refrescar].
- */
+/** Hook: acceso al toolkit. Devuelve [acceso, refrescar]. */
 export function useToolkitAccess(): [boolean, () => void] {
   const [access, setAccess] = useState(false);
 
@@ -79,9 +56,7 @@ export function useToolkitAccess(): [boolean, () => void] {
   return [access, refresh];
 }
 
-/**
- * Hook: acceso al módulo ZIP de una app. Devuelve [acceso, refrescar].
- */
+/** Hook: acceso al módulo ZIP de una app. Devuelve [acceso, refrescar]. */
 export function useZipAccess(app: string): [boolean, () => void] {
   const [access, setAccess] = useState(false);
 
